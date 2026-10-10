@@ -123,3 +123,48 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   - **B) Create the empty repository on github.com** and add the remote manually.
 - **Decision:** A.
 - **Reason:** Scriptable and reusable for later phases (CI status, releases).
+
+## ADR-009: Claude API (Haiku 5.5) as the only LLM provider in v1
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** The original brief asked for a local LLM through Ollama (zero cost), with a
+  Claude provider implemented but disabled. The owner decided to use the paid Claude API
+  instead, with a total budget of US$ 5 (see ADR-010).
+- **Options:**
+  - **A) Claude Haiku 5.5 as main brain, Ollama as fallback:** never without an LLM, but
+    requires Ollama plus a ~5 GB model, shares VRAM with Whisper and doubles provider testing.
+  - **B) Claude Haiku 5.5 only, behind the `LLMProvider` interface:** simplest install and
+    the whole GPU is left to speech recognition; without internet or budget, only the local
+    rule-based commands work.
+  - **C) Claude Sonnet 5.5:** more capable, but about 20 times the price of Haiku.
+- **Decision:** B, model `claude-haiku-5-5`. Without internet or budget, JARVIS keeps
+  answering the commands handled by local rules and explains the limitation in character.
+  An Ollama fallback is listed in [V2_IDEAS.md](V2_IDEAS.md).
+- **Reason:** Better tool calling and Portuguese than a local 7–8B model, one less runtime
+  to install, and about 6.8 GB of free VRAM left for Whisper (larger, more accurate model).
+  At US$ 0.10 / 0.50 per million input / output tokens, a tool-using request is estimated
+  at US$ 0.001–0.002, so US$ 5 covers roughly 2,500–5,000 LLM requests; rule-based
+  commands cost nothing. Real costs will be measured in Phase 3.
+- **Consequences:** Conversation and tool selection need an internet connection. The
+  "zero cost" constraint now has one paid exception, capped at US$ 5.
+
+## ADR-010: US$ 5 spending cap enforced in two layers
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Total Claude API spending must never exceed US$ 5.
+- **Options:**
+  - **A) Server-side only:** prepaid credits with auto-reload disabled and a workspace
+    spend limit in the Anthropic Console. A hard guarantee, but requests simply start
+    failing when the money runs out.
+  - **B) Local guard only:** the app prices every response from its token usage and stops
+    before the cap. Graceful and visible, but an estimate, not a guarantee.
+  - **C) Both.**
+- **Decision:** C.
+  - **Server (done by the owner in the Console):** at most US$ 5 of prepaid credits,
+    auto-reload disabled, workspace spend limit set.
+  - **Local (Phase 3):** each response's token usage is priced with rates from the
+    configuration and accumulated in SQLite; a warning at US$ 4.00 and a hard stop at
+    US$ 4.90, after which JARVIS switches to rules-only mode and says so in character.
+    Spending is shown by `jarvis --check` and on the HUD.
+- **Reason:** The server limit is the guarantee; the local guard avoids hitting it
+  mid-sentence and makes spending visible.
