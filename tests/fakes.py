@@ -8,6 +8,7 @@ from jarvis.audio.clip import AudioClip, Samples
 from jarvis.audio.listener import Utterance
 from jarvis.i18n import Language
 from jarvis.stt.base import Transcript
+from jarvis.windows.volume import VolumeState
 
 
 def clip(seconds: float = 0.1, sample_rate: int = 16_000) -> AudioClip:
@@ -22,10 +23,12 @@ class FakeListener:
     def __init__(self, *results: Utterance | None) -> None:
         self._results = list(results)
         self.calls = 0
+        self.timeouts: list[float | None] = []
         self.listening = asyncio.Event()
 
-    async def listen(self) -> Utterance | None:
+    async def listen(self, no_speech_timeout_s: float | None = None) -> Utterance | None:
         self.calls += 1
+        self.timeouts.append(no_speech_timeout_s)
         self.listening.set()
         if not self._results:
             await asyncio.Event().wait()  # listens forever, until cancelled
@@ -73,6 +76,20 @@ class FakePlayer:
     async def play(self, played: AudioClip) -> None:
         self.played.append(played)
         await asyncio.sleep(0)
+
+
+class FakeVolume:
+    def __init__(self, level: int = 50, muted: bool = False) -> None:
+        self.state = VolumeState(level, muted)
+
+    async def get(self) -> VolumeState:
+        return self.state
+
+    async def set_level(self, level: int) -> None:
+        self.state = VolumeState(level, self.state.muted)
+
+    async def set_muted(self, muted: bool) -> None:
+        self.state = VolumeState(self.state.level, muted)
 
 
 class RejectEveryone:
