@@ -1,8 +1,17 @@
 # Personal overrides for config/default.toml.
 #
-# Copy this file to config/local.toml (git-ignored) and keep only the keys you
-# want to change. Tables are merged key by key; lists are replaced as a whole.
+# Copy this file to config/local.toml (git-ignored) and keep only the keys you want to
+# change. Tables are merged key by key; lists are replaced as a whole.
 
 # [logging]
 # level = "DEBUG"
 # log_transcripts = false
+
+# [audio]
+# output_device = "fifine"          # replies on the headset instead of the speakers
+
+# [vad]
+# min_speech_level_dbfs = -45.0     # value suggested by `uv run jarvis --mic-test`
+
+# [tts]
+# edge_voice_en = "en-GB-ThomasNeural"

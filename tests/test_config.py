@@ -53,6 +53,10 @@ def test_unknown_key_is_rejected(config_dir: Path) -> None:
         "[logging]\nmax_file_size_mb = 0\n",
         "[weather]\nlatitude = 123.0\n",
         '[weather]\ncountry_code = "brazil"\n',
+        '[language]\ndefault = "es"\n',
+        '[stt]\ndevice = "tpu"\n',
+        '[tts]\npiper_voice_en = "alan"\n',
+        "[vad]\nno_speech_timeout_s = 20.0\nmax_utterance_s = 10.0\n",
     ],
 )
 def test_invalid_values_are_rejected(config_dir: Path, toml: str) -> None:

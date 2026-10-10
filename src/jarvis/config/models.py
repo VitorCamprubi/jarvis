@@ -5,9 +5,11 @@ there is a single source of truth and a missing key is reported, not hidden.
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from jarvis.i18n.language import Language
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -25,6 +27,50 @@ class LoggingConfig(_Section):
     log_transcripts: bool
 
 
+class LanguageConfig(_Section):
+    default: Language
+
+
+class ActivationConfig(_Section):
+    hotkey: str = Field(min_length=1)
+
+
+class AudioConfig(_Section):
+    input_device: str
+    output_device: str
+    feedback_volume: float = Field(ge=0, le=1)
+
+
+class VadConfig(_Section):
+    threshold: float = Field(gt=0, lt=1)
+    min_speech_level_dbfs: float = Field(ge=-100, le=0)
+    silence_ms: int = Field(ge=100, le=5000)
+    no_speech_timeout_s: float = Field(gt=0, le=60)
+    max_utterance_s: float = Field(gt=0, le=120)
+    pre_roll_ms: int = Field(ge=0, le=2000)
+
+
+class SttConfig(_Section):
+    model: str = Field(min_length=1)
+    device: Literal["cuda", "cpu"]
+    compute_type: str = Field(min_length=1)
+    beam_size: int = Field(ge=1, le=10)
+    short_audio_s: float = Field(ge=0)
+    min_confidence: float = Field(ge=0.5, le=1)
+    min_confidence_short: float = Field(ge=0.5, le=1)
+
+
+class TtsConfig(_Section):
+    first_audio_timeout_s: float = Field(gt=0, le=30)
+    retry_online_after_s: float = Field(ge=0)
+    cache: bool
+    cache_max_mb: int = Field(gt=0)
+    edge_voice_en: str = Field(min_length=1)
+    edge_voice_pt: str = Field(min_length=1)
+    piper_voice_en: str = Field(pattern=r"^[a-z]{2}_[A-Z]{2}-[a-z0-9_]+-[a-z]+$")
+    piper_voice_pt: str = Field(pattern=r"^[a-z]{2}_[A-Z]{2}-[a-z0-9_]+-[a-z]+$")
+
+
 class WeatherConfig(_Section):
     city: str = Field(min_length=1)
     region: str
@@ -36,4 +82,16 @@ class WeatherConfig(_Section):
 
 class AppConfig(_Section):
     logging: LoggingConfig
+    language: LanguageConfig
+    activation: ActivationConfig
+    audio: AudioConfig
+    vad: VadConfig
+    stt: SttConfig
+    tts: TtsConfig
     weather: WeatherConfig
+
+    @model_validator(mode="after")
+    def _check_vad_timings(self) -> Self:
+        if self.vad.no_speech_timeout_s > self.vad.max_utterance_s:
+            raise ValueError("vad.no_speech_timeout_s cannot exceed vad.max_utterance_s")
+        return self

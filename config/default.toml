@@ -13,6 +13,53 @@ backup_count = 5          # rotated files kept per log
 # The file stays on this machine; set to false to stop recording it.
 log_transcripts = true
 
+[language]
+# Language used until the first conversation turn, and whenever the language of
+# what you said cannot be detected with confidence: "pt" or "en".
+default = "pt"
+
+[activation]
+# Global shortcut that starts listening. Modifiers: ctrl, alt, shift, win.
+# Keys: a-z, 0-9, f1-f24, space, pause, insert, home, end, pageup, pagedown.
+hotkey = "ctrl+alt+j"
+
+[audio]
+# Part of a device name, as listed by `uv run jarvis --devices`. Empty = Windows default.
+input_device = ""
+output_device = ""
+feedback_volume = 0.25    # start/stop listening tones, from 0.0 to 1.0
+
+[vad]
+threshold = 0.5           # speech probability (0-1) above which a 32 ms frame counts as speech
+# Quieter frames count as silence, so distant voices (TV, videos, people nearby) are ignored.
+# Calibrate with `uv run jarvis --mic-test`.
+min_speech_level_dbfs = -45.0
+silence_ms = 600          # silence that marks the end of what you said
+no_speech_timeout_s = 5.0 # stop listening if you say nothing
+max_utterance_s = 15.0    # hard limit for one request
+pre_roll_ms = 300         # audio kept from just before speech starts (first syllable)
+
+[stt]
+model = "large-v3-turbo"  # faster-whisper model name (ADR-015)
+device = "cuda"           # "cuda" or "cpu" (falls back to cpu automatically if CUDA fails)
+compute_type = "float16"  # float16 on GPU; int8 on CPU
+beam_size = 5
+# Language detection is restricted to pt/en (ADR-016). Below these confidence levels
+# JARVIS keeps the language of the previous turn. Short audio needs more confidence.
+short_audio_s = 1.5
+min_confidence = 0.70
+min_confidence_short = 0.90
+
+[tts]
+first_audio_timeout_s = 2.0   # use the offline voice if edge-tts takes longer than this
+retry_online_after_s = 60     # after an edge-tts failure, stay offline for this long
+cache = true                  # replay phrases already synthesised online
+cache_max_mb = 50
+edge_voice_en = "en-GB-RyanNeural"
+edge_voice_pt = "pt-BR-AntonioNeural"
+piper_voice_en = "en_GB-alan-medium"     # offline voices, downloaded on first use
+piper_voice_pt = "pt_BR-faber-medium"
+
 [weather]
 # Default location for weather questions. Coordinates are stored explicitly
 # because several Brazilian cities share the name Sorocaba (SP, RN, SC).

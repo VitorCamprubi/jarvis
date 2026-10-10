@@ -10,3 +10,4 @@ from typing import Final
 PROJECT_ROOT: Final = Path(__file__).resolve().parents[2]
 CONFIG_DIR: Final = PROJECT_ROOT / "config"
 ENV_FILE: Final = PROJECT_ROOT / ".env"
+DATA_DIR: Final = PROJECT_ROOT / "data"
