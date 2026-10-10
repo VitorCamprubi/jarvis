@@ -1,8 +1,7 @@
-import os
-import sys
 import threading
 
 import pytest
+from conditions import needs_desktop
 
 from jarvis.activation import HotkeyError, HotkeyListener, parse_hotkey
 
@@ -34,12 +33,6 @@ def test_parse_function_and_named_keys(text: str, virtual_key: int) -> None:
 def test_invalid_hotkeys_are_rejected(text: str) -> None:
     with pytest.raises(HotkeyError):
         parse_hotkey(text)
-
-
-needs_desktop = pytest.mark.skipif(
-    sys.platform != "win32" or os.environ.get("CI") == "true",
-    reason="registers real hotkeys; needs an interactive Windows desktop",
-)
 
 
 @needs_desktop
