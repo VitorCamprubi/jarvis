@@ -277,4 +277,22 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   GPL-3.0: this project stays MIT because it uses, but does not redistribute, Piper.
   Voices used: CC0 (Brazilian) and CC-BY-SA / Mimic 3 (British).
 - **Consequences:** A new phrase takes ~1.1 s to synthesise, so the 1.5 s target is met
-  for cached phrases; streaming playback is a Phase 6 latency task.
+  for cached phrases; streaming playback is a Phase 6 latency task. Only fixed phrases from
+  the locale files are cached: replies containing what the user said are never written to
+  disk, consistent with the option to switch off the transcript log.
+
+## ADR-018: Loudness gate on top of the VAD
+
+- **Date:** 2026-10-09 · **Status:** Proposed (implemented, pending the owner's review)
+- **Context:** Measured on the owner's PC with nobody speaking into the headset: the
+  microphone level stayed around -58 dBFS, yet Silero rated almost half of the frames as
+  speech (distant voices: a TV, a video, people nearby). A recording that starts this way
+  only stops at the 15 s limit.
+- **Options:**
+  - **A) Loudness gate:** frames quieter than `vad.min_speech_level_dbfs` count as silence;
+    `jarvis --mic-test` measures the background and the owner's voice and suggests a value.
+  - **B) Higher VAD threshold:** does not help, distant speech scores above 0.9.
+  - **C) Nothing:** occasional 15 s recordings in a noisy room.
+- **Decision:** A, default -45 dBFS (-100 disables it).
+- **Reason:** The headset microphone is close to the mouth, so the owner's voice is far
+  louder than voices across the room; the gate filters them at no cost.
