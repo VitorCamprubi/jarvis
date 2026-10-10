@@ -5,13 +5,14 @@ there is a single source of truth and a missing key is reported, not hidden.
 """
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from jarvis.i18n.language import Language
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+HttpUrlText = Annotated[str, Field(pattern=r"^https?://\S+$")]
 
 
 class _Section(BaseModel):
@@ -71,6 +72,24 @@ class TtsConfig(_Section):
     piper_voice_pt: str = Field(pattern=r"^[a-z]{2}_[A-Z]{2}-[a-z0-9_]+-[a-z]+$")
 
 
+class ConfirmationConfig(_Section):
+    timeout_s: float = Field(ge=1, le=30)
+
+
+class AppsConfig(_Section):
+    match_threshold: int = Field(ge=50, le=100)
+    refresh_minutes: int = Field(ge=1, le=1440)
+    aliases: dict[str, str]  # spoken name -> Start menu app name, or a URL
+
+
+class SitesConfig(_Section):
+    favorites: dict[str, HttpUrlText]
+
+
+class VolumeConfig(_Section):
+    step: int = Field(ge=1, le=50)
+
+
 class WeatherConfig(_Section):
     city: str = Field(min_length=1)
     region: str
@@ -88,6 +107,10 @@ class AppConfig(_Section):
     vad: VadConfig
     stt: SttConfig
     tts: TtsConfig
+    confirmation: ConfirmationConfig
+    apps: AppsConfig
+    sites: SitesConfig
+    volume: VolumeConfig
     weather: WeatherConfig
 
     @model_validator(mode="after")

@@ -60,6 +60,33 @@ edge_voice_pt = "pt-BR-AntonioNeural"
 piper_voice_en = "en_GB-alan-medium"     # offline voices, downloaded on first use
 piper_voice_pt = "pt_BR-faber-medium"
 
+[confirmation]
+# How long JARVIS waits for "yes" after asking before a shutdown, restart or close.
+timeout_s = 6.0
+
+[apps]
+match_threshold = 85      # 0-100: how close a spoken name must be to an app or window name
+refresh_minutes = 30      # how often the Start menu list is reloaded
+
+[apps.aliases]
+# Spoken name = a Start menu app name, or a URL to open in the default browser.
+navegador = "https://www.google.com"
+browser = "https://www.google.com"
+# Abbreviations are aliases: approximate matching deliberately ignores initials.
+"vs code" = "Visual Studio Code"
+vscode = "Visual Studio Code"
+
+[sites.favorites]
+# Spoken name = URL. "Abre o YouTube", "open GitHub"...
+google = "https://www.google.com"
+youtube = "https://www.youtube.com"
+gmail = "https://mail.google.com"
+github = "https://github.com/VitorCamprubi"
+linkedin = "https://www.linkedin.com"
+
+[volume]
+step = 10                 # percentage points for "louder" / "mais baixo"
+
 [weather]
 # Default location for weather questions. Coordinates are stored explicitly
 # because several Brazilian cities share the name Sorocaba (SP, RN, SC).
