@@ -1,0 +1,26 @@
+# Textos em português do Brasil. Toda chave também deve existir em en.toml (os testes conferem).
+# Uma chave tem uma frase ou uma lista de variações; uma delas é sorteada.
+
+[startup]
+ready = [
+    "Todos os sistemas operacionais, senhor.",
+    "Sistemas online. Às suas ordens, senhor.",
+    "É bom estar de volta, senhor. Todos os sistemas estão funcionando.",
+]
+
+[pipeline]
+heard = [
+    "Ouvi: {text}",
+    "O senhor disse: {text}",
+    "Entendido, senhor. O senhor disse: {text}",
+]
+not_understood = [
+    "Receio não ter compreendido, senhor.",
+    "Perdão, senhor. Não consegui entender.",
+]
+
+[errors]
+generic = [
+    "Lamento muito, senhor. Algo deu errado do meu lado.",
+    "Minhas desculpas, senhor. Parece que tropecei nos meus próprios circuitos.",
+]

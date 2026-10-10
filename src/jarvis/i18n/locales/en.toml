@@ -1,0 +1,26 @@
+# English texts. Every key must also exist in pt-BR.toml (checked by the tests).
+# A key holds one phrase or a list of variants; one variant is picked at random.
+
+[startup]
+ready = [
+    "All systems online, sir.",
+    "Systems online. At your service, sir.",
+    "Good to be back, sir. All systems are operational.",
+]
+
+[pipeline]
+heard = [
+    "I heard: {text}",
+    "You said: {text}",
+    "Understood, sir. You said: {text}",
+]
+not_understood = [
+    "I'm afraid I didn't quite catch that, sir.",
+    "My apologies, sir. I couldn't make that out.",
+]
+
+[errors]
+generic = [
+    "I'm terribly sorry, sir. Something went wrong on my end.",
+    "My apologies, sir. I seem to have tripped over my own circuits.",
+]
