@@ -168,3 +168,113 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
     Spending is shown by `jarvis --check` and on the HUD.
 - **Reason:** The server limit is the guarantee; the local guard avoids hitting it
   mid-sentence and makes spending visible.
+
+## ADR-011: Tap-to-talk with a Win32 global hotkey
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Phases 1–5 are activated by a global keyboard shortcut; the wake word
+  arrives in Phase 6 and should use the same flow.
+- **Options:**
+  - **A) Tap to talk:** one press starts listening, voice activity detection ends it.
+    Implemented with the Win32 `RegisterHotKey` API through `ctypes`.
+  - **B) Hold to talk with pynput:** precise control, but needs a low-level keyboard hook
+    that sees every key (Windows silently drops slow hooks), and makes the VAD useless.
+  - **C) Both modes:** more code for little gain. (`keyboard` was excluded: unmaintained
+    since 2020.)
+- **Decision:** A, default shortcut `Ctrl+Alt+J` (configurable). A second press while
+  listening cancels; listening also stops after 5 s without speech or 15 s in total.
+- **Reason:** Same flow as the future wake word, no dependency, no keyboard hook and no
+  CPU use while idle: Windows only notifies the registered combination.
+
+## ADR-012: sounddevice and soundfile for audio I/O
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** The microphone must be read in small blocks and replies played back,
+  including the MP3 produced by edge-tts.
+- **Options:** **A) sounddevice (PortAudio) + soundfile** (decodes MP3; measured: 2 ms for
+  a 4.6 s reply); **B) PyAudio** (older API, no numpy integration); **C) miniaudio**
+  (all-in-one, much less used).
+- **Decision:** A. Input and output devices are selectable by part of their name, because
+  the Windows default output on the owner's PC is not the headset.
+- **Reason:** Both libraries are maintained, numpy-native and ship their native libraries
+  in Windows wheels.
+
+## ADR-013: Silero VAD, streamed frame by frame, for end-of-speech detection
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Recording must stop when the user stops talking, not after a fixed time.
+- **Options:**
+  - **A) Silero VAD v6:** small neural network; the ONNX model already ships with
+    faster-whisper. A thin wrapper feeds it 32 ms frames, carrying its LSTM state.
+  - **B) webrtcvad:** very light, but more false positives with noise and breathing.
+  - **C) Energy threshold:** simplest and most fragile (fans, keyboard).
+- **Decision:** A, with a 600 ms silence window (configurable).
+- **Reason:** Best accuracy at negligible CPU cost and no extra dependency. The model file
+  is internal to faster-whisper, so its version is pinned by the lockfile and a test runs it.
+
+## ADR-014: CUDA libraries from NVIDIA's pip wheels
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** CTranslate2 (behind faster-whisper) needs cuBLAS 12 and cuDNN 9 on the GPU;
+  its Windows wheel does not ship them (`cublas64_12.dll is not found`).
+- **Options:**
+  - **A) `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` wheels** (~1.3 GB download), with the
+    app registering their DLL folders at start-up. Tested on the target PC.
+  - **B) System-wide CUDA Toolkit + cuDNN:** manual, 3+ GB, needs admin rights.
+  - **C) Third-party archive suggested by faster-whisper's README:** manual download.
+- **Decision:** A, in a `cuda` dependency group installed by default; CI skips it.
+- **Reason:** `uv sync` installs everything; no manual or admin steps.
+
+## ADR-015: Whisper large-v3-turbo in float16
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Speech recognition must be fast (target ~1.5 s per local command) and good
+  in Brazilian Portuguese. Measured on the RTX 4060 Ti with six short pt/en commands:
+
+  | Model | Auto language, beam 5 | Forced language, greedy | VRAM | Correct |
+  |---|---|---|---|---|
+  | large-v3-turbo float16 | 0.35–0.42 s | 0.18–0.20 s | 2.2 GB | 6/6 |
+  | large-v3-turbo int8_float16 | 0.33–0.38 s | 0.17–0.20 s | 1.1 GB | 6/6 |
+  | large-v3 float16 | 0.45–0.67 s | 0.27–0.40 s | 3.9 GB | 6/6 |
+
+- **Options:** A) turbo float16; B) turbo int8_float16; C) large-v3 float16.
+- **Decision:** A. Model and precision are configuration values.
+- **Reason:** With no local LLM (ADR-009) VRAM is plentiful, so there is no reason to
+  quantise; large-v3 costs ~0.2 s more for no measurable gain on these commands. To be
+  re-checked with the owner's real voice.
+
+## ADR-016: Language detection restricted to Portuguese and English
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Whisper's language detection is unreliable on short phrases and may pick a
+  third language (Spanish, Galician) for Portuguese commands.
+- **Options:**
+  - **A) Restricted detection:** keep only the pt and en probabilities, renormalise and
+    take the larger; when it is not confident enough (stricter for audio under 1.5 s),
+    keep the language of the previous turn (initially the configured default).
+  - **B) Transcribe twice** (forced pt and forced en) and keep the more confident result:
+    more robust, ~0.2 s slower.
+  - **C) Trust Whisper's detection as is.**
+- **Decision:** A.
+- **Reason:** No extra latency and handles the common failure; the previous turn's
+  language is the best prior in a conversation.
+
+## ADR-017: edge-tts with Piper as offline fallback and a phrase cache
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Replies are spoken with a British male voice in English and a Brazilian male
+  voice in Portuguese. Measured: edge-tts takes 0.70 s to the first audio chunk and 1.1 s
+  in total for a short reply; Piper takes 0.1 s on the CPU.
+- **Options:**
+  - **A) edge-tts primary, Piper fallback, disk cache of spoken phrases.**
+  - **B) Piper primary:** fastest and always offline, but a more synthetic voice.
+  - **C) edge-tts only:** silent without internet.
+- **Decision:** A. Piper takes over when edge-tts fails or does not start answering within
+  2 s, and edge-tts is skipped for a minute after a failure. Phrases already synthesised by
+  edge-tts are replayed from `data/tts-cache`.
+- **Reason:** Best voice quality with a guaranteed offline voice. edge-tts relies on an
+  unofficial Microsoft endpoint that has changed before; Piper covers that risk. Piper is
+  GPL-3.0: this project stays MIT because it uses, but does not redistribute, Piper.
+  Voices used: CC0 (Brazilian) and CC-BY-SA / Mimic 3 (British).
+- **Consequences:** A new phrase takes ~1.1 s to synthesise, so the 1.5 s target is met
+  for cached phrases; streaming playback is a Phase 6 latency task.
