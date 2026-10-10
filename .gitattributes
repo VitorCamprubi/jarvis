@@ -1,0 +1,3 @@
+# Store and check out text files with LF endings on every OS, so the formatter,
+# CI and editors all see the same bytes.
+* text=auto eol=lf
