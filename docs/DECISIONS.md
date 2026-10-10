@@ -283,7 +283,7 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
 
 ## ADR-018: Loudness gate on top of the VAD
 
-- **Date:** 2026-10-09 · **Status:** Proposed (implemented, pending the owner's review)
+- **Date:** 2026-10-09 · **Status:** Accepted
 - **Context:** Measured on the owner's PC with nobody speaking into the headset: the
   microphone level stayed around -58 dBFS, yet Silero rated almost half of the frames as
   speech (distant voices: a TV, a video, people nearby). A recording that starts this way
