@@ -5,7 +5,15 @@ from typing import Any
 
 import pytest
 
-from jarvis.doctor import Status, check_config, check_gpu, check_python, check_secrets
+from jarvis.doctor import (
+    Status,
+    check_config,
+    check_cuda,
+    check_gpu,
+    check_hotkey,
+    check_python,
+    check_secrets,
+)
 
 FakeRun = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -52,6 +60,27 @@ def test_gpu_check_fails_when_driver_is_unavailable(error: Exception) -> None:
 
 def test_gpu_check_warns_on_unexpected_output() -> None:
     assert check_gpu(nvidia_smi_returning("something else")).status is Status.WARN
+
+
+def test_cuda_check_fails_without_the_nvidia_wheels() -> None:
+    result = check_cuda(lambda: [])
+
+    assert result.status is Status.FAIL
+    assert "uv sync" in result.detail
+
+
+def test_cuda_check_names_missing_libraries(tmp_path: Path) -> None:
+    (tmp_path / "cublas64_12.dll").write_bytes(b"")
+
+    result = check_cuda(lambda: [tmp_path])
+
+    assert result.status is Status.FAIL
+    assert "cudnn64_9.dll" in result.detail
+
+
+def test_hotkey_check() -> None:
+    assert check_hotkey("ctrl+alt+j").status is Status.OK
+    assert check_hotkey("ctrl+alt+").status is Status.FAIL
 
 
 def test_config_check_fails_without_config(tmp_path: Path) -> None:
