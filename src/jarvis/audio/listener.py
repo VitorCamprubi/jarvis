@@ -46,8 +46,9 @@ class Utterance:
 
 
 class Listener(Protocol):
-    async def listen(self) -> Utterance | None:
-        """Record until the end of speech; None if nothing was said."""
+    async def listen(self, no_speech_timeout_s: float | None = None) -> Utterance | None:
+        """Record until the end of speech; None if nothing was said in time (by default
+        within the configured vad.no_speech_timeout_s)."""
         ...
 
 
@@ -74,7 +75,10 @@ class MicrophoneListener:
         self._device = device
         self._stream_factory = stream_factory
 
-    async def listen(self) -> Utterance | None:
+    async def listen(self, no_speech_timeout_s: float | None = None) -> Utterance | None:
+        config = self._config
+        if no_speech_timeout_s is not None:
+            config = config.model_copy(update={"no_speech_timeout_s": no_speech_timeout_s})
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[Samples] = asyncio.Queue()
 
@@ -85,11 +89,11 @@ class MicrophoneListener:
             loop.call_soon_threadsafe(frames.put_nowait, indata[:, 0].copy())
 
         self._vad.reset()
-        detector = EndpointDetector(self._config)
+        detector = EndpointDetector(config)
         # Frames kept from before speech is confirmed, so the first syllable is not lost: the
         # pre-roll plus the speech frames that preceded the confirming one.
         recent: deque[Samples] = deque(
-            maxlen=round(self._config.pre_roll_ms / FRAME_MS) + MIN_SPEECH_FRAMES - 1
+            maxlen=round(config.pre_roll_ms / FRAME_MS) + MIN_SPEECH_FRAMES - 1
         )
         captured: list[Samples] = []
         try:

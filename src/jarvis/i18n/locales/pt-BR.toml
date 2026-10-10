@@ -6,18 +6,64 @@ ready = [
     "Todos os sistemas operacionais, senhor.",
     "Sistemas online. Às suas ordens, senhor.",
     "É bom estar de volta, senhor. Todos os sistemas estão funcionando.",
+    "Bem-vindo de volta, Sr. Camprubi. Todos os sistemas estão online.",
 ]
 
 [pipeline]
-heard = [
-    "Ouvi: {text}",
-    "O senhor disse: {text}",
-    "Entendido, senhor. O senhor disse: {text}",
-]
 not_understood = [
     "Receio não ter compreendido, senhor.",
     "Perdão, senhor. Não consegui entender.",
 ]
+
+[router]
+unknown = [
+    "Receio que isso ainda esteja além das minhas capacidades, senhor.",
+    "Isso ainda não faz parte do meu repertório, senhor.",
+]
+
+[confirm]
+cancelled = [
+    "Muito bem, senhor. Deixarei como está.",
+    "Entendido. Operação cancelada, senhor.",
+]
+
+[apps]
+opening = ["Abrindo {app}, senhor.", "{app}, saindo agora mesmo."]
+not_found = "Não encontrei nenhum aplicativo chamado {name}, senhor."
+
+[sites]
+opening = ["Abrindo {site}, senhor.", "{site}, na tela."]
+not_found = "Receio não conhecer o site {site}, senhor."
+
+[system]
+summary = "CPU em {cpu} por cento, memória em {ram} por cento e a GPU em {gpu} por cento, a {gpu_temp} graus, senhor."
+summary_no_gpu = "CPU em {cpu} por cento e memória em {ram} por cento, senhor."
+
+[media]
+play_pause = ["Feito, senhor.", "Como desejar."]
+next = ["Próxima faixa, senhor.", "Avançando."]
+previous = ["Faixa anterior, senhor.", "Voltando uma faixa."]
+
+[volume]
+set = ["Volume em {level} por cento, senhor.", "Volume ajustado para {level} por cento."]
+muted = ["Som desligado, senhor.", "Silêncio, como pedido."]
+unmuted = ["Som de volta, senhor.", "E estamos de volta, senhor."]
+current = "O volume está em {level} por cento, senhor."
+current_muted = "O volume está em {level} por cento, mas no mudo, senhor."
+
+[lock]
+locking = ["Bloqueando o computador, senhor.", "Bloqueado. Fico de olho nas coisas, senhor."]
+
+[power]
+confirm_shutdown = "O senhor deseja desligar o computador. Posso prosseguir, senhor?"
+confirm_restart = "O senhor deseja reiniciar o computador. Posso prosseguir, senhor?"
+shutting_down = ["Desligando em cinco segundos. Até logo, senhor.", "Desligando. Até a próxima, Sr. Camprubi."]
+restarting = ["Reiniciando em cinco segundos, senhor. Já volto."]
+
+[close]
+confirm = "Fechar {app}? Posso prosseguir, senhor?"
+closing = ["Fechando {app}, senhor.", "{app} está de saída, senhor."]
+not_running = "{app} não parece estar aberto, senhor."
 
 [errors]
 generic = [

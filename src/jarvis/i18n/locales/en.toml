@@ -6,18 +6,64 @@ ready = [
     "All systems online, sir.",
     "Systems online. At your service, sir.",
     "Good to be back, sir. All systems are operational.",
+    "Welcome back, Mr. Camprubi. All systems are online.",
 ]
 
 [pipeline]
-heard = [
-    "I heard: {text}",
-    "You said: {text}",
-    "Understood, sir. You said: {text}",
-]
 not_understood = [
     "I'm afraid I didn't quite catch that, sir.",
     "My apologies, sir. I couldn't make that out.",
 ]
+
+[router]
+unknown = [
+    "I'm afraid that is beyond my abilities for now, sir.",
+    "That one isn't in my repertoire yet, sir.",
+]
+
+[confirm]
+cancelled = [
+    "Very well, sir. I'll leave it.",
+    "Understood. Standing down, sir.",
+]
+
+[apps]
+opening = ["Opening {app}, sir.", "{app}, coming right up."]
+not_found = "I couldn't find an app called {name}, sir."
+
+[sites]
+opening = ["Opening {site}, sir.", "{site}, on screen."]
+not_found = "I'm afraid I don't know the site {site}, sir."
+
+[system]
+summary = "CPU at {cpu} percent, memory at {ram} percent, and the GPU at {gpu} percent, running at {gpu_temp} degrees, sir."
+summary_no_gpu = "CPU at {cpu} percent and memory at {ram} percent, sir."
+
+[media]
+play_pause = ["Done, sir.", "As you wish."]
+next = ["Next track, sir.", "Skipping ahead."]
+previous = ["Previous track, sir.", "Going back one."]
+
+[volume]
+set = ["Volume at {level} percent, sir.", "Volume set to {level} percent."]
+muted = ["Sound muted, sir.", "Silence, as requested."]
+unmuted = ["Sound restored, sir.", "And we're back, sir."]
+current = "The volume is at {level} percent, sir."
+current_muted = "The volume is at {level} percent, but muted, sir."
+
+[lock]
+locking = ["Locking the computer, sir.", "Locked. I'll keep an eye on things, sir."]
+
+[power]
+confirm_shutdown = "You'd like me to shut down the computer. Shall I proceed, sir?"
+confirm_restart = "You'd like me to restart the computer. Shall I proceed, sir?"
+shutting_down = ["Shutting down in five seconds. Goodbye, sir.", "Powering down. Until next time, Mr. Camprubi."]
+restarting = ["Restarting in five seconds, sir. I'll be right back."]
+
+[close]
+confirm = "Close {app}? Shall I proceed, sir?"
+closing = ["Closing {app}, sir.", "{app} is on its way out, sir."]
+not_running = "{app} doesn't appear to be open, sir."
 
 [errors]
 generic = [

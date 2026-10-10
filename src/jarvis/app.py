@@ -22,7 +22,9 @@ from jarvis.core.runtime import CoreRuntime
 from jarvis.core.verification import AcceptEveryone
 from jarvis.i18n import Language, Translator
 from jarvis.log import setup_logging, shutdown_logging
+from jarvis.router import Router
 from jarvis.stt.whisper import WhisperStt
+from jarvis.tools import AppIndex, build_tools
 from jarvis.tts.base import TextToSpeech
 from jarvis.tts.cache import CachedTts
 from jarvis.tts.edge import EdgeTts
@@ -72,6 +74,9 @@ def _run(config: AppConfig) -> int:
         {Language.EN: config.tts.piper_voice_en, Language.PT: config.tts.piper_voice_pt},
         paths.DATA_DIR / "voices",
     )
+    app_index = AppIndex(config.apps.match_threshold, config.apps.refresh_minutes * 60)
+    tools = build_tools(config, app_index)
+    log.info("Tools: %s", ", ".join(tool.name for tool in tools))
     pipeline = Pipeline(
         listener=MicrophoneListener(config.vad, SileroVad(), input_device),
         stt=stt,
@@ -79,9 +84,11 @@ def _run(config: AppConfig) -> int:
         player=SoundDevicePlayer(output_device),
         sounds=FeedbackSounds.create(config.audio.feedback_volume),
         translator=Translator.load(),
+        router=Router(tools),
         verifier=AcceptEveryone(),
         language=config.language.default,
         silence_ms=config.vad.silence_ms,
+        confirmation_timeout_s=config.confirmation.timeout_s,
     )
 
     runtime = CoreRuntime()
@@ -89,7 +96,7 @@ def _run(config: AppConfig) -> int:
     # The hotkey thread never touches the pipeline: it asks the core loop to do it.
     hotkey_listener = HotkeyListener(hotkey, on_press=lambda: runtime.call_soon(pipeline.activate))
     try:
-        startup = runtime.submit(_start_up(pipeline, stt, piper))
+        startup = runtime.submit(_start_up(pipeline, stt, piper, app_index))
         hotkey_listener.start()
         log.info("Press %s to talk. Ctrl+C quits.", config.activation.hotkey.upper())
         while True:
@@ -107,13 +114,21 @@ def _run(config: AppConfig) -> int:
         runtime.stop()
 
 
-async def _start_up(pipeline: Pipeline, stt: WhisperStt, piper: PiperTts) -> None:
+async def _start_up(
+    pipeline: Pipeline, stt: WhisperStt, piper: PiperTts, app_index: AppIndex
+) -> None:
     log.info("Loading the speech model (the first run downloads it)...")
+    # The Start menu index loads meanwhile; "open X" would reload it on demand anyway.
+    index_task = asyncio.create_task(app_index.refresh())
     await asyncio.to_thread(stt.load)
     try:
         await asyncio.to_thread(piper.prepare)
     except Exception as exc:  # JARVIS still works online without the offline voice
         log.warning("Offline voice unavailable: %s", exc)
+    try:
+        await index_task
+    except Exception as exc:
+        log.warning("Could not read the Start menu yet: %s", exc)
     await pipeline.start()
 
 
