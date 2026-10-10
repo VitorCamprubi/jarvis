@@ -1,0 +1,8 @@
+# Personal overrides for config/default.toml.
+#
+# Copy this file to config/local.toml (git-ignored) and keep only the keys you
+# want to change. Tables are merged key by key; lists are replaced as a whole.
+
+# [logging]
+# level = "DEBUG"
+# log_transcripts = false
