@@ -296,3 +296,91 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
 - **Decision:** A, default -45 dBFS (-100 disables it).
 - **Reason:** The headset microphone is close to the mouth, so the owner's voice is far
   louder than voices across the room; the gate filters them at no cost.
+
+## ADR-019: Rule router with regular expressions per language
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Simple, fixed commands must be resolved locally (fast and free), in both
+  languages, before anything reaches the LLM (Phase 3).
+- **Options:**
+  - **A) Regular expressions per intent and language** over normalised text (lowercase, no
+    accents or punctuation), with named groups for arguments; fuzzy matching only for
+    argument values such as app names.
+  - **B) Fuzzy matching of the whole sentence** against example phrases: tolerant, but
+    false positives are dangerous ("shut down") and arguments are hard to extract.
+  - **C) Local intent classifier:** another model, more latency, less transparent.
+- **Decision:** A. Each tool declares its own patterns; every pattern of both languages is
+  tried, and the reply uses the language the user spoke.
+- **Reason:** Predictable, sub-millisecond and testable with phrase tables; phrasings the
+  rules miss will go to the LLM.
+
+## ADR-020: Explicit tool list as the allowlist
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Tools must be self-contained modules, adding one must not touch the core,
+  and the LLM may only call registered tools.
+- **Options:**
+  - **A) Explicit list in `jarvis/tools/__init__.py`:** each tool is a module with name,
+    description, a pydantic parameter model (the JSON schema for Claude in Phase 3),
+    router patterns and `run()`.
+  - **B) Auto-discovery** with a decorator, like Spring's component scan: zero lines, but
+    any module in the package silently becomes callable.
+  - **C) Plugins through entry points:** built for third-party tools, overkill here.
+- **Decision:** A.
+- **Reason:** The list is the security allowlist, in one place and easy to audit; a new
+  tool is one module plus one line, outside the core.
+
+## ADR-021: App index from the Start menu (`Get-StartApps`)
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** "Open X" must find any app the user sees in the Start menu.
+- **Options:**
+  - **A) `Get-StartApps`:** 215 apps on the target PC in 0.8 s, including Store apps
+    (WhatsApp); launched through `shell:AppsFolder`.
+  - **B) Scan `.lnk` shortcuts** in the user and all-users Start menu folders (162):
+    pure Python, but misses Store apps.
+  - **C) Both, merged:** most coverage, duplicates to reconcile.
+- **Decision:** A, loaded in the background at start-up and refreshed periodically, with
+  rapidfuzz for approximate names and aliases in the configuration (an alias may point to a
+  URL: "browser" opens the default browser, since Chrome is not installed).
+- **Reason:** It is exactly the Start menu's own list, Store apps included.
+
+## ADR-022: pycaw for volume, simulated media keys for playback
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Options:** **A) pycaw** (Windows Core Audio: set a percentage, read the level, mute)
+  **plus media keys** (play/pause, next, previous; works with Spotify Free);
+  **B) virtual volume keys only** (no "set to 30 %", 2 % steps); **C) nircmd** (third-party
+  executable).
+- **Decision:** A.
+- **Reason:** Absolute volume control needs Core Audio; pycaw is pure Python and
+  maintained (September 2026 release).
+
+## ADR-023: psutil and NVML for PC performance
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Options:** **A) psutil** (CPU, RAM, disks) **plus nvidia-ml-py** (NVIDIA's official NVML
+  bindings: GPU load, temperature, VRAM in 42 ms); **B) psutil plus parsing `nvidia-smi`**
+  (slower, fragile); **C) CPU temperature through LibreHardwareMonitor** (driver and admin
+  rights, not required by the scope).
+- **Decision:** A. psutil has no CPU temperature on Windows; the scope asks for GPU
+  temperature only.
+
+## ADR-024: Closing programs gracefully
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Options:** **A) Ask the windows to close** (WM_CLOSE, like clicking X; the app may ask
+  to save); **B) force-kill the process** (may lose unsaved work); **C) A, then offer to
+  force it** after a second confirmation.
+- **Decision:** A. Shell, system and JARVIS's own windows are never closed.
+- **Reason:** No data loss, in line with the v1 rule that no tool destroys data.
+
+## ADR-025: Spoken confirmation for dangerous actions
+
+- **Date:** 2026-10-09 · **Status:** Accepted
+- **Context:** Shutting down, restarting and closing programs require confirmation by voice
+  (original brief).
+- **Decision:** The tool returns a confirmation request; JARVIS asks ("Shall I proceed,
+  sir?"), plays the listening tone and listens again without the hotkey for up to 6 s. Yes
+  and no words are accepted in both languages; "no" wins over "yes", and silence or anything
+  unclear cancels. Shutdown and restart run with a 5 s delay so the reply can finish.
