@@ -4,9 +4,21 @@ Personal bilingual (Brazilian Portuguese / English) voice assistant for Windows,
 J.A.R.V.I.S. from the Iron Man films: push a key or say its name, ask, and it acts on the PC,
 searches the web and answers out loud, in the manner of a formal British butler.
 
-> **Status:** work in progress, Phase 1 (ears and voice): press a hotkey, speak, and JARVIS
-> repeats what it understood, in the language you used. A full bilingual README with demo,
-> architecture diagram and installation guide arrives in the final phase.
+> **Status:** work in progress, Phase 2 (hands): local commands in Portuguese and English,
+> resolved by rules without any LLM. A full bilingual README with demo, architecture diagram
+> and installation guide arrives in the final phase.
+
+## What it can do so far
+
+| Say (pt / en) | JARVIS |
+|---|---|
+| "Abre o Spotify" / "Open Spotify" | Opens any app in the Start menu (approximate names, aliases) |
+| "Abre o YouTube" / "Go to github dot com" | Opens favourite sites or a spoken domain |
+| "Como está o PC?" / "System status" | CPU, RAM, GPU load and temperature (details in the log) |
+| "Pausa a música", "Próxima" / "Pause", "Next song" | Media keys (works with Spotify Free) |
+| "Volume em 30%", "Mais alto", "Mudo" / "Volume up", "Mute" | Master volume |
+| "Bloqueia o computador" / "Lock the computer" | Locks the PC |
+| "Desliga o computador", "Fecha o Discord" / "Restart my PC", "Close Discord" | Asks "Shall I proceed, sir?" and acts only on a spoken yes |
 
 ## Requirements
 
