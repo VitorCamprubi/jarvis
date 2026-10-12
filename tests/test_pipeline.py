@@ -1,50 +1,61 @@
 import asyncio
 from collections.abc import Callable, Coroutine
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import pytest
 from fakes import (
     FakeListener,
     FakePlayer,
+    FakeProvider,
     FakeStt,
     FakeTts,
     RejectEveryone,
+    call,
+    calls,
+    says,
     utterance,
 )
 from pydantic import BaseModel
 
 from jarvis.audio.listener import Utterance
 from jarvis.audio.tones import FeedbackSounds
-from jarvis.core.pipeline import Pipeline
+from jarvis.brain import Brain, BudgetGuard, ConversationMemory
+from jarvis.brain.provider import TokenUsage
+from jarvis.config import BudgetConfig
+from jarvis.core.language import LanguagePolicy
+from jarvis.core.pipeline import Pipeline, greeting_key
 from jarvis.core.state import State
 from jarvis.core.verification import AcceptEveryone, SpeakerVerifier
 from jarvis.i18n import Language, Translator
 from jarvis.router import Router
+from jarvis.storage import Database, UsageStore
 from jarvis.stt.base import Transcript
 from jarvis.tools.base import Intent, Reply, Tool, ToolResult, phrasings
 
+KEYS = {
+    "startup.morning": ("Good morning, sir.", "Bom dia, senhor."),
+    "startup.afternoon": ("Good afternoon, sir.", "Boa tarde, senhor."),
+    "startup.evening": ("Good evening, sir.", "Boa noite, senhor."),
+    "startup.night": ("Still up, sir?", "Ainda acordado, senhor?"),
+    "pipeline.not_understood": ("Pardon, sir?", "Como, senhor?"),
+    "router.unknown": ("Beyond me, sir.", "Não sei, senhor."),
+    "brain.say": ("{text}", "{text}"),
+    "brain.not_configured": ("No brain, sir.", "Sem cérebro, senhor."),
+    "brain.budget_warning": ("Budget nearly spent, sir.", "Orçamento quase no fim, senhor."),
+    "confirm.cancelled": ("Cancelled, sir.", "Cancelado, senhor."),
+    "errors.generic": ("Something broke, sir.", "Algo quebrou, senhor."),
+    "test.greeted": ("Hello, sir.", "Olá, senhor."),
+    "test.confirm": ("Detonate, sir?", "Detonar, senhor?"),
+    "test.done": ("Boom, sir.", "Bum, senhor."),
+    "test.reminder": ("Reminder: {text}.", "Lembrete: {text}."),
+}
 TEXTS = {
-    Language.EN: {
-        "startup.ready": ["Online, sir."],
-        "pipeline.not_understood": ["Pardon, sir?"],
-        "router.unknown": ["Beyond me, sir."],
-        "confirm.cancelled": ["Cancelled, sir."],
-        "errors.generic": ["Something broke, sir."],
-        "test.greeted": ["Hello, sir."],
-        "test.confirm": ["Detonate, sir?"],
-        "test.done": ["Boom, sir."],
-    },
-    Language.PT: {
-        "startup.ready": ["Online, senhor."],
-        "pipeline.not_understood": ["Como, senhor?"],
-        "router.unknown": ["Não sei, senhor."],
-        "confirm.cancelled": ["Cancelado, senhor."],
-        "errors.generic": ["Algo quebrou, senhor."],
-        "test.greeted": ["Olá, senhor."],
-        "test.confirm": ["Detonar, senhor?"],
-        "test.done": ["Bum, senhor."],
-    },
+    Language.EN: {key: [en] for key, (en, _) in KEYS.items()},
+    Language.PT: {key: [pt] for key, (_, pt) in KEYS.items()},
 }
 CONFIRMATION_TIMEOUT_S = 6.0
+MORNING = datetime(2026, 10, 12, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
 
 
 class NoParams(BaseModel):
@@ -98,6 +109,8 @@ class Harness:
         listener: FakeListener,
         stt: FakeStt,
         verifier: SpeakerVerifier | None = None,
+        llm: FakeProvider | None = None,
+        warn_usd: float = 4.0,
     ) -> None:
         self.listener = listener
         self.stt = stt
@@ -106,18 +119,45 @@ class Harness:
         self.sounds = FeedbackSounds.create(0.1)
         self.detonate = DetonateTool()
         self.states: list[State] = []
+        self.memory = ConversationMemory(max_exchanges=6, ttl_s=600)
+        self.policy = LanguagePolicy()
+        translator = Translator(TEXTS, choose=lambda variants: variants[0])
+        tools: list[Tool[Any]] = [GreetTool(), self.detonate, BrokenTool()]
+        brain = None
+        if llm is not None:
+            budget = BudgetConfig(
+                warn_usd=warn_usd,
+                stop_usd=4.9,
+                input_per_mtok=0.10,
+                output_per_mtok=0.50,
+                cache_write_per_mtok=0.125,
+                cache_read_per_mtok=0.01,
+            )
+            brain = Brain(
+                provider=llm,
+                tools=tools,
+                budget=BudgetGuard(UsageStore(Database(":memory:")), budget),
+                memory=self.memory,
+                translator=translator,
+                system="You are JARVIS.",
+                max_tool_rounds=3,
+            )
         self.pipeline = Pipeline(
             listener=listener,
             stt=stt,
             tts=self.tts,
             player=self.player,
             sounds=self.sounds,
-            translator=Translator(TEXTS, choose=lambda variants: variants[0]),
-            router=Router([GreetTool(), self.detonate, BrokenTool()]),
+            translator=translator,
+            router=Router(tools),
+            brain=brain,
+            memory=self.memory,
+            policy=self.policy,
             verifier=verifier or AcceptEveryone(),
             language=Language.PT,
             silence_ms=600,
             confirmation_timeout_s=CONFIRMATION_TIMEOUT_S,
+            clock=lambda: MORNING,
         )
         self.pipeline.subscribe(self.states.append)
 
@@ -147,6 +187,19 @@ def heard(*results: Utterance | None) -> FakeListener:
     return FakeListener(*results)
 
 
+@pytest.mark.parametrize(
+    ("hour", "key"),
+    [
+        (5, "startup.morning"),
+        (13, "startup.afternoon"),
+        (21, "startup.evening"),
+        (2, "startup.night"),
+    ],
+)
+def test_greeting_depends_on_the_time_of_day(hour: int, key: str) -> None:
+    assert greeting_key(hour) == key
+
+
 def test_start_greets_in_the_default_language_with_a_cacheable_phrase() -> None:
     harness = Harness(FakeListener(), FakeStt())
 
@@ -155,7 +208,7 @@ def test_start_greets_in_the_default_language_with_a_cacheable_phrase() -> None:
 
     run(scenario)
 
-    assert harness.tts.spoken == [("Online, senhor.", Language.PT, True)]
+    assert harness.tts.spoken == [("Bom dia, senhor.", Language.PT, True)]
     assert harness.pipeline.state is State.IDLE
 
 
@@ -181,12 +234,66 @@ def test_previous_language_is_passed_to_speech_recognition() -> None:
     assert harness.stt.calls == [Language.PT, Language.EN]
 
 
-def test_unknown_request_gets_a_polite_not_yet() -> None:
+def test_locked_language_overrides_the_spoken_one() -> None:
+    harness = Harness(heard(utterance()), FakeStt(said("Oi.", Language.PT)))
+
+    async def scenario() -> None:
+        await harness.policy.lock(Language.EN)
+        await harness.turns()
+
+    run(scenario)
+
+    assert harness.tts.spoken == [("Hello, sir.", Language.EN, True)]
+
+
+def test_without_an_llm_unknown_requests_get_a_polite_not_configured() -> None:
     harness = Harness(heard(utterance()), FakeStt(said("Me conta uma piada.")))
 
     run(harness.turns)
 
-    assert harness.spoken_texts == ["Não sei, senhor."]
+    assert harness.spoken_texts == ["Sem cérebro, senhor."]
+
+
+def test_unknown_requests_go_to_the_llm_and_its_words_are_not_cached() -> None:
+    llm = FakeProvider(says("Por que o programador usa óculos? Porque não enxerga C#."))
+    harness = Harness(heard(utterance()), FakeStt(said("Me conta uma piada.")), llm=llm)
+
+    run(harness.turns)
+
+    assert harness.tts.spoken == [
+        ("Por que o programador usa óculos? Porque não enxerga C#.", Language.PT, False)
+    ]
+    _, messages, tools = llm.requests[0]
+    assert "Me conta uma piada." in str(messages[-1])
+    assert {tool.name for tool in tools} == {"greet", "detonate", "broken"}
+
+
+def test_every_exchange_is_remembered_for_follow_ups() -> None:
+    llm = FakeProvider(says("Amanhã também, senhor."))
+    harness = Harness(
+        heard(utterance(), utterance()), FakeStt(said("Oi."), said("E amanhã?")), llm=llm
+    )
+
+    run(lambda: harness.turns(2))
+
+    _, messages, _ = llm.requests[0]
+    # The rule-handled first exchange is part of the LLM's context for the follow-up.
+    assert [type(m).__name__ for m in messages] == [
+        "UserMessage",
+        "AssistantMessage",
+        "UserMessage",
+    ]
+    assert "Oi." in str(messages[0]) and "Olá, senhor." in str(messages[1])
+
+
+def test_budget_warning_is_spoken_once_after_the_reply() -> None:
+    expensive = TokenUsage(input_tokens=10_000_000, output_tokens=0)  # US$ 1.00
+    llm = FakeProvider(says("Feito.", usage=expensive))
+    harness = Harness(heard(utterance()), FakeStt(said("Faz algo.")), llm=llm, warn_usd=0.5)
+
+    run(harness.turns)
+
+    assert harness.spoken_texts == ["Feito.", "Orçamento quase no fim, senhor."]
 
 
 def test_confirmed_action_runs_after_a_spoken_yes() -> None:
@@ -216,6 +323,53 @@ def test_silence_cancels_the_action() -> None:
 
     assert not harness.detonate.executed
     assert harness.spoken_texts[-1] == "Cancelado, senhor."
+
+
+def test_an_llm_requested_action_still_needs_a_spoken_yes() -> None:
+    llm = FakeProvider(calls(call("detonate")))
+    harness = Harness(
+        heard(utterance(), utterance()),
+        FakeStt(said("Pode explodir tudo, por gentileza?"), said("Não.")),
+        llm=llm,
+    )
+
+    run(harness.turns)
+
+    assert not harness.detonate.executed
+    assert harness.spoken_texts == ["Detonar, senhor?", "Cancelado, senhor."]
+
+
+def test_announcements_wait_for_the_current_turn() -> None:
+    listener = FakeListener()  # listens until cancelled
+    harness = Harness(listener, FakeStt())
+
+    async def scenario() -> None:
+        await harness.ready()
+        turn = harness.pipeline.activate()
+        assert turn is not None
+        await listener.listening.wait()
+        harness.pipeline.announce(Reply("test.reminder", {"text": "chá"}), Language.PT)
+        assert harness.spoken_texts == []  # still listening: nothing said yet
+        harness.pipeline.activate()  # cancels the listening turn
+        await asyncio.gather(turn, return_exceptions=True)
+        for _ in range(5):  # let the queued announcement run
+            await asyncio.sleep(0)
+
+    run(scenario)
+    assert harness.spoken_texts == ["Lembrete: chá."]
+
+
+def test_announcement_when_idle_is_spoken_at_once() -> None:
+    harness = Harness(FakeListener(), FakeStt())
+
+    async def scenario() -> None:
+        await harness.ready()
+        harness.pipeline.announce(Reply("test.reminder", {"text": "tea"}), Language.EN)
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+    run(scenario)
+    assert harness.tts.spoken == [("Reminder: tea.", Language.EN, True)]
 
 
 def test_no_speech_skips_transcription() -> None:
