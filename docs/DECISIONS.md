@@ -469,6 +469,10 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   edge-tts); **C) `urllib` on a worker thread.**
 - **Decision:** A. Current conditions, today and tomorrow; a spoken city is geocoded,
   preferring Brazil.
+- **Amended (2026-10-12, real tests):** "preferring Brazil" picked Tóquio (Pará) and Nova
+  Iorque (Maranhão), and Open-Meteo matches names only in the language asked ("londres" in
+  English is a village in Argentina). The city is now looked up in Portuguese and English
+  in parallel and the most populous result wins; on a tie, the name in the reply language.
 
 ## ADR-033: Language lock applies to replies only
 
