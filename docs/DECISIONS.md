@@ -384,3 +384,98 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   sir?"), plays the listening tone and listens again without the hotkey for up to 6 s. Yes
   and no words are accepted in both languages; "no" wins over "yes", and silence or anything
   unclear cancels. Shutdown and restart run with a 5 s delay so the reply can finish.
+
+## ADR-026: Claude through the official SDK with our own tool-use loop
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Context:** Requests the rules cannot resolve go to Claude Haiku 5.5 (ADR-009) with every
+  registered tool available through tool calling.
+- **Options:**
+  - **A) Official `anthropic` SDK (async client) with our own loop:** before each request we
+    check the budget, only allowlisted tools exist, dangerous tools still need a spoken
+    "yes", and the number of iterations is capped.
+  - **B) The SDK's Tool Runner (beta):** less code, but it executes tools by itself, which
+    leaves no natural place for the voice confirmation or the spending cap.
+  - **C) Raw HTTP:** re-implements the SDK.
+- **Decision:** A, behind an `LLMProvider` interface (`ClaudeProvider` is its only
+  implementation in v1).
+- **Reason:** Safety and cost controls sit exactly where each request is made.
+
+## ADR-027: Adaptive thinking at low effort
+
+- **Date:** 2026-10-12 · **Status:** Accepted (to be confirmed by measurement)
+- **Context:** Voice replies must start within about 4 s when the LLM is involved.
+- **Options:** **A) adaptive thinking, `effort: "low"`** (Anthropic's recommendation for chat
+  and short tool tasks; the model may skip thinking on simple requests); **B) thinking
+  disabled** (lowest latency, but the model may skip a tool it needs); **C) default
+  `medium` effort** (better reasoning, slower and dearer).
+- **Decision:** A. Effort is a configuration value; A and B will be measured with the real
+  API key before the phase closes.
+
+## ADR-028: Text-only short-term memory
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Context:** Follow-ups such as "and tomorrow?" or "open the second one" need context.
+  Claude Haiku 5.5 rejects replayed thinking blocks once earlier history changes, so a
+  sliding window must not resend old reasoning.
+- **Options:** **A) in-memory, text-only:** the last 6 exchanges (what was said, the reply,
+  a one-line summary of tool actions), forgotten after 10 minutes of silence, plus the last
+  result list kept apart so "open the second one" works through the rules; **B) persist
+  the conversation in SQLite:** survives restarts, more personal data at rest; **C)
+  server-side compaction or memory:** overkill.
+- **Decision:** A.
+- **Reason:** Append-only by construction, cheap in tokens and nothing personal on disk.
+
+## ADR-029: SQLite through the standard library
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Options:** **A) `sqlite3` with small repository classes** (like JDBC plus DAOs), run on a
+  worker thread, schema versioned in the database; **B) aiosqlite:** native async, one more
+  dependency; **C) an ORM (SQLAlchemy):** overkill for three tables.
+- **Decision:** A, in `data/jarvis.db`: reminders, API usage and settings (language lock).
+
+## ADR-030: Our own bilingual parser for reminder times
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Options:**
+  - **A) Own parser** (regular expressions and spoken numbers) for "em 20 minutos",
+    "daqui a meia hora", "às 18h", "amanhã às 9h", "in 20 minutes", "at 6 pm",
+    "tomorrow at 9"; unusual phrasings go to Claude, which computes the time (the prompt
+    carries the current local time) and calls the tool with an ISO date-time.
+  - **B) dateparser:** broad, but Portuguese forms such as "às 18h" or "daqui a" are not
+    documented and results can surprise.
+  - **C) Claude only:** costs API calls for every reminder and fails offline.
+- **Decision:** A. Reminders are stored in SQLite; those that fell due while JARVIS was
+  closed are announced at start-up; an announcement waits for a conversation in progress.
+
+## ADR-031: In-memory file index
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Context:** On the owner's PC the Desktop alone holds 112,000 files, 104,000 of them in
+  build, dependency or `.git` folders.
+- **Options:** **A) in-memory index** of names under the configured folders, skipping build,
+  dependency and VCS folders (about 10,000 files), rebuilt in the background every 10
+  minutes; **B) walk the folders on every request:** always fresh, slow here; **C) query the
+  Windows Search index:** fast and content-aware, but complex and dependent on indexer
+  settings.
+- **Decision:** A. Up to five results; "open the first/second..." chooses one. Executables
+  and scripts are never run: JARVIS opens their folder with the file selected instead.
+
+## ADR-032: Open-Meteo through httpx2
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Options:** **A) Open-Meteo forecast and geocoding APIs through `httpx2`** (async, already
+  installed with the Anthropic SDK); **B) the same through `aiohttp`** (installed with
+  edge-tts); **C) `urllib` on a worker thread.**
+- **Decision:** A. Current conditions, today and tomorrow; a spoken city is geocoded,
+  preferring Brazil.
+
+## ADR-033: Language lock applies to replies only
+
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Options:** **A) the lock fixes the reply language;** Whisper keeps detecting what is
+  spoken, so Portuguese is still understood while English replies are locked; **B) the
+  lock also forces Whisper's language:** ~0.2 s faster, but the other language would be
+  transcribed as nonsense.
+- **Decision:** A. "Jarvis, speak English" / "fala em português" lock, "auto language" /
+  "volta ao automático" unlock; the lock is stored and survives restarts.
