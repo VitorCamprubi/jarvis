@@ -3,12 +3,15 @@
 Each phase adds the checks it needs. A FAIL makes the command exit with a non-zero code.
 """
 
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import sounddevice as sd
 
@@ -120,12 +123,58 @@ def check_audio_device(query: str, kind: Kind) -> CheckResult:
     return CheckResult(label, Status.OK, name + ("" if query else " (Windows default)"))
 
 
-def check_secrets(env_file: Path = paths.ENV_FILE) -> CheckResult:
-    if load_secrets(env_file).anthropic_api_key is None:
+def check_llm(
+    env_file: Path = paths.ENV_FILE,
+    model: str = "claude-haiku-5-5",
+    client_factory: Callable[[str], Any] | None = None,
+) -> CheckResult:
+    """Validate the API key with a free model lookup (no tokens are spent)."""
+    key = load_secrets(env_file).anthropic_api_key
+    if key is None:
         return CheckResult(
-            "Secrets", Status.WARN, "ANTHROPIC_API_KEY not set (needed from Phase 3)"
+            "LLM", Status.WARN, "ANTHROPIC_API_KEY not set in .env: only local rules will answer"
         )
-    return CheckResult("Secrets", Status.OK, "ANTHROPIC_API_KEY is set")
+    import anthropic
+
+    factory = client_factory or (
+        lambda api_key: anthropic.Anthropic(api_key=api_key, timeout=10, max_retries=0)
+    )
+    try:
+        factory(key.get_secret_value()).models.retrieve(model)
+    except anthropic.AuthenticationError:
+        return CheckResult("LLM", Status.FAIL, "the API key was rejected: create a new one")
+    except anthropic.NotFoundError:
+        return CheckResult("LLM", Status.FAIL, f"model {model} is not available to this key")
+    except anthropic.BadRequestError as exc:
+        if "anthropic-workspace-id" in str(exc):
+            return CheckResult(
+                "LLM", Status.FAIL, "the key is not tied to a workspace: create it in 'jarvis'"
+            )
+        return CheckResult("LLM", Status.FAIL, f"the API refused the request: {exc}")
+    except anthropic.APIConnectionError:
+        return CheckResult("LLM", Status.WARN, "could not reach the Anthropic API (offline?)")
+    except anthropic.APIStatusError as exc:
+        return CheckResult("LLM", Status.FAIL, f"the API answered {exc.status_code}")
+    return CheckResult("LLM", Status.OK, f"API key valid; {model} available")
+
+
+def check_spending(
+    db_file: Path = paths.DATA_DIR / "jarvis.db", stop_usd: float = 0.0
+) -> CheckResult:
+    """What the LLM has cost so far, by JARVIS's own estimate (ADR-010)."""
+    if not db_file.exists():
+        return CheckResult("Spending", Status.OK, "no LLM usage yet")
+    try:
+        with closing(sqlite3.connect(db_file)) as connection:
+            spent = connection.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage"
+            ).fetchone()[0]
+    except sqlite3.Error:
+        return CheckResult("Spending", Status.OK, "no LLM usage yet")
+    status = Status.WARN if stop_usd and spent >= stop_usd else Status.OK
+    return CheckResult(
+        "Spending", status, f"US$ {spent:.4f} so far (estimate; stops at {stop_usd:.2f})"
+    )
 
 
 def run_checks() -> int:
@@ -140,7 +189,12 @@ def run_checks() -> int:
             check_audio_device(config.audio.input_device, "input"),
             check_audio_device(config.audio.output_device, "output"),
         ]
-    results.append(check_secrets())
+        results += [
+            check_llm(model=config.brain.model),
+            check_spending(stop_usd=config.budget.stop_usd),
+        ]
+    else:
+        results.append(check_llm())
 
     width = max(len(result.name) for result in results)
     for result in results:
