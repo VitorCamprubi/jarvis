@@ -8,7 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Secrets(BaseSettings):
     # SecretStr masks the value in repr() and logs; call .get_secret_value() only where needed.
-    model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore", frozen=True)
+    # An empty value (the untouched .env.example line) counts as not set.
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8", extra="ignore", frozen=True, env_ignore_empty=True
+    )
 
     anthropic_api_key: SecretStr | None = None
 

@@ -4,6 +4,10 @@
 # to change into config/local.toml (git-ignored); its values override these.
 # Secrets (API keys) never go here: they belong in .env.
 
+[user]
+name = "Vitor"
+surname = "Camprubi"          # "Mr. Camprubi" / "Sr. Camprubi", now and then
+
 [logging]
 level = "INFO"            # DEBUG, INFO, WARNING, ERROR or CRITICAL
 directory = "logs"        # relative to the project root, or an absolute path
@@ -86,6 +90,39 @@ linkedin = "https://www.linkedin.com"
 
 [volume]
 step = 10                 # percentage points for "louder" / "mais baixo"
+
+[brain]
+# Claude answers what the local rules cannot (ADR-009, ADR-026).
+model = "claude-haiku-5-5"
+effort = "low"                # low | medium | high (ADR-027)
+thinking = "adaptive"         # adaptive | disabled
+max_tokens = 1024             # thinking counts towards this limit
+max_tool_rounds = 4           # tool calls in one request before giving up
+request_timeout_s = 20
+memory_turns = 6              # recent exchanges remembered (ADR-028)
+memory_minutes = 10           # forgotten after this much silence
+
+[budget]
+# Local spending guard (ADR-010); the Console limit is the hard stop.
+warn_usd = 4.00
+stop_usd = 4.90
+# Claude Haiku 5.5, US$ per million tokens (prompts up to 100K tokens).
+input_per_mtok = 0.10
+output_per_mtok = 0.50
+cache_write_per_mtok = 0.125
+cache_read_per_mtok = 0.01
+
+[files]
+# Folders searched by "procura o arquivo..." (ADR-031). "~" is your user folder.
+folders = ["~/Desktop", "~/Documents", "~/Downloads"]
+# Build, dependency and version-control folders are skipped, as are hidden ones.
+skip_dirs = ["node_modules", "__pycache__", "venv", "env", "target", "build", "dist", "out", "bin", "obj", "site-packages"]
+refresh_minutes = 10
+max_results = 5
+match_threshold = 75
+
+[reminders]
+default_hour = 9              # "amanhã" without a time means 9:00
 
 [weather]
 # Default location for weather questions. Coordinates are stored explicitly

@@ -90,6 +90,50 @@ class VolumeConfig(_Section):
     step: int = Field(ge=1, le=50)
 
 
+class UserConfig(_Section):
+    name: str = Field(min_length=1)
+    surname: str = Field(min_length=1)
+
+
+class BrainConfig(_Section):
+    model: str = Field(min_length=1)
+    effort: Literal["low", "medium", "high"]
+    thinking: Literal["adaptive", "disabled"]
+    max_tokens: int = Field(ge=256, le=16000)
+    max_tool_rounds: int = Field(ge=1, le=8)
+    request_timeout_s: float = Field(gt=0, le=120)
+    memory_turns: int = Field(ge=0, le=20)
+    memory_minutes: float = Field(gt=0, le=240)
+
+
+class BudgetConfig(_Section):
+    warn_usd: float = Field(ge=0)
+    stop_usd: float = Field(gt=0)
+    # US$ per million tokens.
+    input_per_mtok: float = Field(ge=0)
+    output_per_mtok: float = Field(ge=0)
+    cache_write_per_mtok: float = Field(ge=0)
+    cache_read_per_mtok: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _warn_before_stop(self) -> Self:
+        if self.warn_usd > self.stop_usd:
+            raise ValueError("budget.warn_usd cannot exceed budget.stop_usd")
+        return self
+
+
+class FilesConfig(_Section):
+    folders: list[str] = Field(min_length=1)
+    skip_dirs: list[str]
+    refresh_minutes: float = Field(gt=0, le=1440)
+    max_results: int = Field(ge=1, le=10)
+    match_threshold: int = Field(ge=50, le=100)
+
+
+class RemindersConfig(_Section):
+    default_hour: int = Field(ge=0, le=23)  # "amanhã" without a time
+
+
 class WeatherConfig(_Section):
     city: str = Field(min_length=1)
     region: str
@@ -100,6 +144,7 @@ class WeatherConfig(_Section):
 
 
 class AppConfig(_Section):
+    user: UserConfig
     logging: LoggingConfig
     language: LanguageConfig
     activation: ActivationConfig
@@ -111,6 +156,10 @@ class AppConfig(_Section):
     apps: AppsConfig
     sites: SitesConfig
     volume: VolumeConfig
+    brain: BrainConfig
+    budget: BudgetConfig
+    files: FilesConfig
+    reminders: RemindersConfig
     weather: WeatherConfig
 
     @model_validator(mode="after")
