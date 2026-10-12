@@ -16,13 +16,27 @@ def test_both_locales_define_the_same_texts() -> None:
     assert translator.keys(Language.PT) == translator.keys(Language.EN)
 
 
+# Clock formats differ on purpose (12-hour English, 24-hour Portuguese); the code always
+# provides all of these parameters.
+CLOCK_KEYS = {"time.exact", "time.with_minutes"}
+CLOCK_PARAMS = {"h24", "h12", "m", "ampm"}
+
+
 def test_every_variant_uses_the_same_placeholders_in_both_languages() -> None:
     translator = Translator.load()
-    for key in translator.keys(Language.EN):
+    for key in translator.keys(Language.EN) - CLOCK_KEYS:
         variants = [v for language in Language for v in translator.variants(key, language)]
         expected = placeholders(variants[0])
         for variant in variants:
             assert placeholders(variant) == expected, f"{key}: {variant!r}"
+
+
+def test_clock_formats_only_use_the_provided_parameters() -> None:
+    translator = Translator.load()
+    for key in CLOCK_KEYS:
+        for language in Language:
+            for variant in translator.variants(key, language):
+                assert placeholders(variant) <= CLOCK_PARAMS, f"{key}: {variant!r}"
 
 
 def test_text_fills_placeholders_and_picks_a_variant() -> None:

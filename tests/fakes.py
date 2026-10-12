@@ -1,11 +1,21 @@
-"""Test doubles shared by the pipeline and TTS tests (hand-written, no mocking library)."""
+"""Test doubles shared by the tests (hand-written, no mocking library)."""
 
 import asyncio
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
 from jarvis.audio.clip import AudioClip, Samples
 from jarvis.audio.listener import Utterance
+from jarvis.brain.provider import (
+    AssistantMessage,
+    Completion,
+    Message,
+    TokenUsage,
+    ToolCall,
+    ToolSpec,
+)
 from jarvis.i18n import Language
 from jarvis.stt.base import Transcript
 from jarvis.windows.volume import VolumeState
@@ -95,3 +105,37 @@ class FakeVolume:
 class RejectEveryone:
     async def is_owner(self, audio: Samples) -> bool:
         return False
+
+
+class FakeProvider:
+    """An LLM that replies from a script; records every request it receives."""
+
+    model = "fake-model"
+
+    def __init__(self, *script: Completion | Exception) -> None:
+        self._script = list(script)
+        self.requests: list[tuple[str, list[Message], list[ToolSpec]]] = []
+
+    async def complete(
+        self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
+    ) -> Completion:
+        self.requests.append((system, list(messages), list(tools)))
+        step = self._script.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        return step
+
+
+USAGE = TokenUsage(input_tokens=1000, output_tokens=100)
+
+
+def says(text: str, usage: TokenUsage = USAGE, stop: str = "end_turn") -> Completion:
+    return Completion(AssistantMessage(text), stop, usage)
+
+
+def calls(*tool_calls: ToolCall, usage: TokenUsage = USAGE) -> Completion:
+    return Completion(AssistantMessage("", tuple(tool_calls)), "tool_use", usage)
+
+
+def call(name: str, call_id: str = "call-1", **arguments: Any) -> ToolCall:
+    return ToolCall(call_id, name, arguments)

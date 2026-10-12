@@ -9,7 +9,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from jarvis.i18n import Language
+from jarvis.i18n import Language, Translator
 
 
 @dataclass(frozen=True)
@@ -28,12 +28,21 @@ def phrasings(*, pt: Sequence[Intent], en: Sequence[Intent]) -> Mapping[Language
 
 @dataclass(frozen=True)
 class Reply:
-    """What to say, as an i18n key plus its parameters."""
+    """What to say, as an i18n key plus its parameters. A parameter may itself be a Reply,
+    rendered in the same language first (e.g. a weather condition inside a forecast)."""
 
     key: str
     params: Mapping[str, object] = field(default_factory=dict)
     # Measurements and free text make too many variants to be worth caching.
     cacheable: bool = True
+
+
+def render(reply: Reply, translator: Translator, language: Language) -> str:
+    params = {
+        name: render(value, translator, language) if isinstance(value, Reply) else value
+        for name, value in reply.params.items()
+    }
+    return translator.text(reply.key, language, **params)
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,9 @@ class ToolResult:
     details: str | None = None  # the full picture, for the HUD (Phase 5); logged for now
     # Set when the action needs a spoken "yes" first (ADR-025): it runs only once confirmed.
     on_confirm: Callable[[], Awaitable[ToolResult]] | None = None
+    # Facts for the LLM to answer from. When the LLM called the tool and this is set, the LLM
+    # words the reply (e.g. "Will it rain?"); otherwise the tool's own reply is spoken.
+    model_data: str | None = None
 
 
 class Tool[P: BaseModel](ABC):

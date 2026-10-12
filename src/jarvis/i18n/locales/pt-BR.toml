@@ -2,11 +2,21 @@
 # Uma chave tem uma frase ou uma lista de variações; uma delas é sorteada.
 
 [startup]
-ready = [
-    "Todos os sistemas operacionais, senhor.",
-    "Sistemas online. Às suas ordens, senhor.",
-    "É bom estar de volta, senhor. Todos os sistemas estão funcionando.",
-    "Bem-vindo de volta, Sr. Camprubi. Todos os sistemas estão online.",
+morning = [
+    "Bom dia, senhor. Todos os sistemas estão online.",
+    "Bom dia, Sr. Camprubi. Está tudo pronto para o senhor.",
+]
+afternoon = [
+    "Boa tarde, senhor. Todos os sistemas estão online.",
+    "Boa tarde, senhor. Às suas ordens.",
+]
+evening = [
+    "Boa noite, senhor. Todos os sistemas estão online.",
+    "Boa noite, Sr. Camprubi. Sistemas prontos.",
+]
+night = [
+    "Trabalhando até tarde, senhor? Todos os sistemas estão online.",
+    "Ainda acordado, senhor? Os sistemas estão à sua disposição.",
 ]
 
 [pipeline]
@@ -21,11 +31,30 @@ unknown = [
     "Isso ainda não faz parte do meu repertório, senhor.",
 ]
 
+[brain]
+say = "{text}"
+not_configured = "Meu serviço de raciocínio ainda não foi configurado, senhor, então só consigo os comandos simples."
+unavailable = [
+    "Não consigo falar com meu serviço de raciocínio no momento, senhor.",
+    "Minhas funções superiores parecem estar fora do ar, senhor. Tente de novo em instantes.",
+]
+auth_failed = "Minha chave de acesso ao serviço de raciocínio foi recusada, senhor. Talvez precise ser trocada."
+refused = "Receio não poder ajudar com isso, senhor."
+budget_warning = "Uma pequena observação, senhor: já usamos a maior parte dos cinco dólares do meu serviço de raciocínio."
+budget_exhausted = "O orçamento do meu serviço de raciocínio acabou, senhor. Fico com os comandos simples."
+
 [confirm]
 cancelled = [
     "Muito bem, senhor. Deixarei como está.",
     "Entendido. Operação cancelada, senhor.",
 ]
+
+[language]
+locked = [
+    "Pois não, senhor. Falarei em português até segunda ordem.",
+    "Certamente, senhor. A partir de agora, falo em português.",
+]
+auto = "Muito bem, senhor. Responderei no idioma em que o senhor falar."
 
 [apps]
 opening = ["Abrindo {app}, senhor.", "{app}, saindo agora mesmo."]
@@ -34,6 +63,15 @@ not_found = "Não encontrei nenhum aplicativo chamado {name}, senhor."
 [sites]
 opening = ["Abrindo {site}, senhor.", "{site}, na tela."]
 not_found = "Receio não conhecer o site {site}, senhor."
+
+[files]
+found = "Encontrei {count} arquivos, senhor. O primeiro é {first}."
+found_one = "Encontrei um arquivo, senhor: {first}."
+none = "Não encontrei nenhum arquivo parecido com {query}, senhor."
+opening = "Abrindo {name}, senhor."
+revealed = "{name} é um programa ou script, senhor, então, por segurança, apenas o mostrei na pasta."
+no_results = "Não há resultados de busca para abrir, senhor. Peça para eu procurar algo primeiro."
+no_such_result = "Não há um resultado número {position}, senhor."
 
 [system]
 summary = "CPU em {cpu} por cento, memória em {ram} por cento e a GPU em {gpu} por cento, a {gpu_temp} graus, senhor."
@@ -64,6 +102,51 @@ restarting = ["Reiniciando em cinco segundos, senhor. Já volto."]
 confirm = "Fechar {app}? Posso prosseguir, senhor?"
 closing = ["Fechando {app}, senhor.", "{app} está de saída, senhor."]
 not_running = "{app} não parece estar aberto, senhor."
+
+[weather]
+now = "Agora em {place} faz {temp} graus, senhor, {condition}."
+day = "{day} em {place}: {condition}, máxima de {max} e mínima de {min} graus, com {rain} por cento de chance de chuva, senhor."
+city_not_found = "Não encontrei nenhuma cidade chamada {city}, senhor."
+unavailable = "Receio que o serviço de clima não esteja respondendo, senhor."
+
+[weather.days]
+today = "Hoje"
+tomorrow = "Amanhã"
+
+[weather.codes]
+clear = "com céu limpo"
+partly_cloudy = "parcialmente nublado"
+overcast = "nublado"
+fog = "com neblina"
+drizzle = "com garoa"
+rain = "com chuva"
+snow = "com neve"
+thunderstorm = "com trovoadas"
+unknown = "com condições indefinidas"
+
+[reminders]
+created = ["Lembrete marcado {when}, senhor: {text}.", "Muito bem, senhor. Eu o lembrarei {when}: {text}."]
+due = ["Senhor, um lembrete: {text}.", "Perdão a interrupção, senhor. Um lembrete: {text}."]
+overdue = "Enquanto o senhor estava fora, venceu este lembrete: {text}."
+need_time = "Para quando, senhor? Repita com o horário, por favor."
+need_text = "Lembrar do quê, senhor?"
+in_the_past = "Receio que esse horário já tenha passado, senhor."
+none = "O senhor não tem lembretes pendentes."
+list = "O senhor tem {count} lembretes. O próximo é {text}, {when}."
+list_one = "O senhor tem um lembrete: {text}, {when}."
+cancelled = "Lembrete cancelado, senhor: {text}."
+not_found = "Não encontrei um lembrete sobre {query}, senhor."
+
+[reminders.when]
+minutes = "em {minutes} minutos"
+today = "hoje às {time}"
+tomorrow = "amanhã às {time}"
+date = "no dia {day}/{month} às {time}"
+
+[time]
+# Como um horário é dito: 24 horas em português, 12 horas em inglês.
+exact = "{h24}h"
+with_minutes = "{h24}h{m:02d}"
 
 [errors]
 generic = [

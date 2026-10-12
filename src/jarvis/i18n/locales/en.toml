@@ -2,11 +2,21 @@
 # A key holds one phrase or a list of variants; one variant is picked at random.
 
 [startup]
-ready = [
-    "All systems online, sir.",
-    "Systems online. At your service, sir.",
-    "Good to be back, sir. All systems are operational.",
-    "Welcome back, Mr. Camprubi. All systems are online.",
+morning = [
+    "Good morning, sir. All systems are online.",
+    "Good morning, Mr. Camprubi. Everything is ready for you.",
+]
+afternoon = [
+    "Good afternoon, sir. All systems are online.",
+    "Good afternoon, sir. At your service.",
+]
+evening = [
+    "Good evening, sir. All systems are online.",
+    "Good evening, Mr. Camprubi. Systems ready.",
+]
+night = [
+    "Working late, sir? All systems are online.",
+    "Still up, sir? The systems are at your disposal.",
 ]
 
 [pipeline]
@@ -21,11 +31,30 @@ unknown = [
     "That one isn't in my repertoire yet, sir.",
 ]
 
+[brain]
+say = "{text}"
+not_configured = "My reasoning service hasn't been set up yet, sir, so I can only manage the simple commands."
+unavailable = [
+    "I can't reach my reasoning service at the moment, sir.",
+    "My higher functions seem to be offline, sir. Do try again shortly.",
+]
+auth_failed = "My access key to the reasoning service was refused, sir. It may need replacing."
+refused = "I'm afraid I can't help with that one, sir."
+budget_warning = "A small note, sir: we have used most of the five-dollar budget for my reasoning service."
+budget_exhausted = "The budget for my reasoning service is spent, sir. I'll stick to the simple commands."
+
 [confirm]
 cancelled = [
     "Very well, sir. I'll leave it.",
     "Understood. Standing down, sir.",
 ]
+
+[language]
+locked = [
+    "Very well, sir. English it is, until you say otherwise.",
+    "Certainly, sir. I'll speak English from now on.",
+]
+auto = "Very well, sir. I'll reply in whichever language you speak."
 
 [apps]
 opening = ["Opening {app}, sir.", "{app}, coming right up."]
@@ -34,6 +63,15 @@ not_found = "I couldn't find an app called {name}, sir."
 [sites]
 opening = ["Opening {site}, sir.", "{site}, on screen."]
 not_found = "I'm afraid I don't know the site {site}, sir."
+
+[files]
+found = "I found {count} files, sir. The first is {first}."
+found_one = "I found one file, sir: {first}."
+none = "I couldn't find any file matching {query}, sir."
+opening = "Opening {name}, sir."
+revealed = "{name} is a program or a script, sir, so for safety I've only shown it in its folder."
+no_results = "There are no search results to open, sir. Ask me to find something first."
+no_such_result = "There is no result number {position}, sir."
 
 [system]
 summary = "CPU at {cpu} percent, memory at {ram} percent, and the GPU at {gpu} percent, running at {gpu_temp} degrees, sir."
@@ -64,6 +102,51 @@ restarting = ["Restarting in five seconds, sir. I'll be right back."]
 confirm = "Close {app}? Shall I proceed, sir?"
 closing = ["Closing {app}, sir.", "{app} is on its way out, sir."]
 not_running = "{app} doesn't appear to be open, sir."
+
+[weather]
+now = "It's {temp} degrees in {place} right now, sir, {condition}."
+day = "{day} in {place}: {condition}, with a high of {max} and a low of {min} degrees, and a {rain} percent chance of rain, sir."
+city_not_found = "I couldn't find a city called {city}, sir."
+unavailable = "I'm afraid the weather service isn't answering, sir."
+
+[weather.days]
+today = "Today"
+tomorrow = "Tomorrow"
+
+[weather.codes]
+clear = "with clear skies"
+partly_cloudy = "partly cloudy"
+overcast = "overcast"
+fog = "with fog"
+drizzle = "with drizzle"
+rain = "with rain"
+snow = "with snow"
+thunderstorm = "with thunderstorms"
+unknown = "conditions unclear"
+
+[reminders]
+created = ["Reminder set for {when}, sir: {text}.", "Very good, sir. I'll remind you {when}: {text}."]
+due = ["Sir, a reminder: {text}.", "Pardon the interruption, sir. A reminder: {text}."]
+overdue = "While you were away, sir, this reminder fell due: {text}."
+need_time = "When should I remind you, sir? Please say it again with a time."
+need_text = "Remind you of what, sir?"
+in_the_past = "I'm afraid that time has already passed, sir."
+none = "You have no pending reminders, sir."
+list = "You have {count} reminders, sir. The next one is {text}, {when}."
+list_one = "You have one reminder, sir: {text}, {when}."
+cancelled = "Reminder cancelled, sir: {text}."
+not_found = "I couldn't find a reminder about {query}, sir."
+
+[reminders.when]
+minutes = "in {minutes} minutes"
+today = "today at {time}"
+tomorrow = "tomorrow at {time}"
+date = "on {day}/{month} at {time}"
+
+[time]
+# How a clock time is said: 12-hour in English, 24-hour in Portuguese.
+exact = "{h12} {ampm}"
+with_minutes = "{h12}:{m:02d} {ampm}"
 
 [errors]
 generic = [
