@@ -27,3 +27,4 @@ data/
 *.iml
 Thumbs.db
 .DS_Store
+.venv-*/

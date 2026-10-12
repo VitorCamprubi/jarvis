@@ -10,8 +10,10 @@ authors = [
 ]
 requires-python = ">=3.14,<3.15"
 dependencies = [
+    "anthropic>=1.13.0",
     "edge-tts>=7.2.8",
     "faster-whisper>=1.2.1",
+    "httpx2>=2.13.1",
     "numpy>=2.5.3",
     "nvidia-ml-py>=13.615.71",
     "onnxruntime>=1.31.0",
