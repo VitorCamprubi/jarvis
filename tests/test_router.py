@@ -1,44 +1,38 @@
-"""Phrase tables: what each spoken command routes to, in both languages."""
+"""Phrase tables: what each spoken command routes to, in both languages.
 
+The router is built exactly like in production (build_tools and the shipped defaults), with
+backends that never touch the system: routing must not run any tool.
+"""
+
+import tomllib
 from typing import Any
 
 import pytest
-from fakes import FakeVolume
 
+from jarvis import paths
+from jarvis.config import AppConfig
+from jarvis.core.language import LanguagePolicy
+from jarvis.i18n import Language
 from jarvis.router import Router
-from jarvis.tools import AppIndex
-from jarvis.tools.apps import OpenAppTool
+from jarvis.storage import Database, ReminderStore
+from jarvis.tools import AppIndex, FileIndex, ResultList, Services, WeatherClient, build_tools
 from jarvis.tools.base import Tool
-from jarvis.tools.close import CloseAppTool
-from jarvis.tools.lock import LockTool
-from jarvis.tools.media import MediaTool
-from jarvis.tools.power import PowerTool
-from jarvis.tools.sites import OpenSiteTool
-from jarvis.tools.system import SystemStatusTool
-from jarvis.tools.volume import VolumeTool
-from jarvis.windows.metrics import SystemStats
-
-
-def no_op(*args: Any) -> None:
-    return None
-
-
-def unused_stats() -> SystemStats:
-    raise AssertionError("routing must not run the tool")
+from jarvis.tools.reminders import ReminderService
 
 
 def all_tools() -> list[Tool[Any]]:
-    """The production tool list and order (see jarvis.tools.build_tools), with fake backends."""
-    return [
-        SystemStatusTool(unused_stats),
-        MediaTool(no_op),
-        VolumeTool(FakeVolume(), 10),
-        LockTool(no_op),
-        PowerTool(no_op),
-        CloseAppTool(80, list_windows=list, close=no_op),
-        OpenSiteTool({"youtube": "https://www.youtube.com", "github": "https://github.com"}, no_op),
-        OpenAppTool(AppIndex(80, 1800, loader=list), {}, start=no_op, open_url=no_op),
-    ]
+    with (paths.CONFIG_DIR / "default.toml").open("rb") as file:
+        config = AppConfig.model_validate(tomllib.load(file))
+    services = Services(
+        app_index=AppIndex(85, 1800, loader=list),
+        file_index=FileIndex([], [], 600),
+        results=ResultList(),
+        weather=WeatherClient(),
+        reminders=ReminderService(ReminderStore(Database(":memory:"))),
+        language=LanguagePolicy(),
+        reply_language=lambda: Language.PT,
+    )
+    return build_tools(config, services)
 
 
 ROUTER = Router(all_tools())
@@ -78,6 +72,26 @@ ROUTER = Router(all_tools())
         ("Reinicia o PC.", "power", {"action": "restart"}),
         ("Fecha o Spotify.", "close_app", {"name": "spotify"}),
         ("Fecha o programa do Discord.", "close_app", {"name": "discord"}),
+        ("Fala em inglês.", "set_language", {"language": "en"}),
+        ("Responda em português.", "set_language", {"language": "pt"}),
+        ("Volta pro automático.", "set_language", {"language": "auto"}),
+        ("Idioma automático.", "set_language", {"language": "auto"}),
+        ("Me lembra em 20 minutos de tirar a pizza.", "create_reminder", {}),
+        ("Cria um lembrete pra reunião às 16h.", "create_reminder", {}),
+        ("Quais são os meus lembretes?", "list_reminders", {}),
+        ("Cancela o lembrete da reunião.", "cancel_reminder", {"query": "reuniao"}),
+        ("Como está o tempo?", "weather", {"when": "now", "city": None}),
+        ("Como vai estar o tempo amanhã?", "weather", {"when": "tomorrow"}),
+        (
+            "Qual a previsão do tempo para amanhã em São Paulo?",
+            "weather",
+            {"when": "tomorrow", "city": "sao paulo"},
+        ),
+        ("Vai chover hoje?", "weather", {"when": "today"}),
+        ("Procura o arquivo currículo.", "search_files", {"query": "curriculo"}),
+        ("Onde está o relatório mensal?", "search_files", {"query": "relatorio mensal"}),
+        ("Abre o segundo.", "open_search_result", {"position": 2}),
+        ("Abre o primeiro arquivo.", "open_search_result", {"position": 1}),
         # English
         ("Open Spotify.", "open_app", {"name": "spotify"}),
         ("Launch Visual Studio Code.", "open_app", {"name": "visual studio code"}),
@@ -103,6 +117,16 @@ ROUTER = Router(all_tools())
         ("Restart my PC.", "power", {"action": "restart"}),
         ("Close Spotify.", "close_app", {"name": "spotify"}),
         ("Quit Discord.", "close_app", {"name": "discord"}),
+        ("Speak English.", "set_language", {"language": "en"}),
+        ("Talk to me in Portuguese.", "set_language", {"language": "pt"}),
+        ("Automatic language.", "set_language", {"language": "auto"}),
+        ("Remind me to call John at 6 pm.", "create_reminder", {}),
+        ("What are my reminders?", "list_reminders", {}),
+        ("Cancel the reminder about John.", "cancel_reminder", {"query": "john"}),
+        ("What's the weather like tomorrow?", "weather", {"when": "tomorrow"}),
+        ("Will it rain tomorrow in London?", "weather", {"when": "tomorrow", "city": "london"}),
+        ("Find the file report.", "search_files", {"query": "report"}),
+        ("Open the second one.", "open_search_result", {"position": 2}),
     ],
 )
 def test_phrase_routes_to_tool(spoken: str, tool: str, args: dict[str, object]) -> None:
@@ -116,8 +140,8 @@ def test_phrase_routes_to_tool(spoken: str, tool: str, args: dict[str, object]) 
 @pytest.mark.parametrize(
     "spoken",
     [
-        "Qual a previsão do tempo para amanhã?",  # weather: LLM and tools of Phase 3
-        "What's the weather like?",
+        "E amanhã?",  # a follow-up: the LLM answers it with the conversation memory
+        "Quem descobriu o Brasil?",  # general knowledge: the LLM
         "Fecha o computador.",  # not a program, and not a power phrasing
         "Abre o.",  # no app name
         "Toca Despacito.",  # playing a specific song is not supported

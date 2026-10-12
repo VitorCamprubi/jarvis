@@ -38,7 +38,9 @@ class Router:
             if match is None:
                 continue
             spoken = {name: value for name, value in match.groupdict().items() if value}
-            args = {**fixed_args, **spoken}
+            # The original sentence travels too, for tools that need its exact words
+            # (reminders keep accents); parameter models ignore it unless they declare it.
+            args = {"utterance": text, **fixed_args, **spoken}
             if not tool.accepts(args):
                 continue
             try:
