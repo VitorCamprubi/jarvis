@@ -24,7 +24,7 @@ from rapidfuzz import fuzz
 from jarvis.config import NewsConfig
 from jarvis.i18n import Language
 from jarvis.text import simplify
-from jarvis.tools.base import Intent, Reply, Tool, ToolResult, phrasings
+from jarvis.tools.base import Intent, Link, Reply, Tool, ToolResult, phrasings
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ def top_headlines(stories: Sequence[Story], count: int) -> list[Story]:
 
 
 def listing(stories: Sequence[Story], tz: Any = None) -> str:
-    """Every story with its link, for the log now and the HUD in Phase 5."""
+    """Every story with its link, for the log."""
     return "\n".join(
         f"- {s.published.astimezone(tz):%H:%M} {s.source}: {s.title}\n  {s.url}" for s in stories
     )
@@ -180,15 +180,22 @@ class NewsService:
             if topic:
                 return ToolResult(Reply("news.none_about", {"topic": topic}, cacheable=False))
             return ToolResult(Reply("news.none"))
-        details = listing(stories, self._clock().tzinfo)
+        tz = self._clock().tzinfo
+        details = listing(stories, tz)
+        links = tuple(
+            Link(s.title, s.url, "web", note=f"{s.source} · {s.published.astimezone(tz):%H:%M}")
+            for s in stories
+        )
         log.info("News: %d stories from the last %g h", len(stories), self._config.max_age_hours)
         text = None
         if self._summarizer is not None:
             text = await self._summarizer.summarize(stories, count, language, topic, introduce)
         if text:
-            return ToolResult(Reply("news.bulletin", {"text": text}, cacheable=False), details)
+            reply = Reply("news.bulletin", {"text": text}, cacheable=False)
+            return ToolResult(reply, details, links=links)
         titles = "; ".join(story.title for story in top_headlines(stories, count))
-        return ToolResult(Reply("news.headlines", {"titles": titles}, cacheable=False), details)
+        reply = Reply("news.headlines", {"titles": titles}, cacheable=False)
+        return ToolResult(reply, details, links=links)
 
     async def _read(self, client: httpx2.AsyncClient, source: NewsSource) -> list[Story] | None:
         cached = self._cache.get(source.url)

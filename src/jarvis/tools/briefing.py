@@ -76,7 +76,7 @@ class BriefingTool(Tool[BriefingParams]):
             cacheable=False,
         )
         details = "\n\n".join(part for part in (weather.details, news.details) if part)
-        return ToolResult(reply, details=details or None)
+        return ToolResult(reply, details=details or None, links=news.links)
 
     async def _todays_reminders(self, now: datetime) -> Reply:
         today = [

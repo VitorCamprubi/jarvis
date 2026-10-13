@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from rapidfuzz import process
 
 from jarvis.text import name_score, normalize, parse_number
-from jarvis.tools.base import Intent, Reply, Tool, ToolResult, phrasings
+from jarvis.tools.base import Intent, Link, Reply, Tool, ToolResult, phrasings
 
 log = logging.getLogger(__name__)
 
@@ -171,7 +171,11 @@ class SearchFilesTool(Tool[SearchFilesParams]):
             {"count": len(paths), "first": spoken_file_name(paths[0])},
             cacheable=False,
         )
-        return ToolResult(reply, details=listing, model_data=listing)
+        links = tuple(
+            Link(f"{number}. {path.name}", str(path), "file", note=str(path.parent))
+            for number, path in enumerate(paths, start=1)
+        )
+        return ToolResult(reply, details=listing, model_data=listing, links=links)
 
 
 def describe(paths: Sequence[Path]) -> str:

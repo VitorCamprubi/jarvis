@@ -34,7 +34,7 @@ from jarvis.brain.provider import (
     WebSearch,
 )
 from jarvis.i18n import Language, Translator
-from jarvis.tools.base import Reply, Tool, ToolResult, render
+from jarvis.tools.base import Link, Reply, Tool, ToolResult, render
 
 log = logging.getLogger(__name__)
 
@@ -155,13 +155,14 @@ class Brain:
         if not text:
             return _say("errors.generic", warned)
         details = None
-        if sources:
-            unique = {source.url: source for source in sources}.values()
+        unique = list({source.url: source for source in sources}.values())
+        if unique:
             details = "Sources:\n" + "\n".join(f"- {s.title}: {s.url}" for s in unique)
             log.info("%s", details)
         # Generated text is never cached on disk (it may contain anything the user said).
         reply = Reply("brain.say", {"text": text}, cacheable=False)
-        return BrainAnswer((ToolResult(reply, details=details),), warned)
+        links = tuple(Link(source.title, source.url, "web") for source in unique)
+        return BrainAnswer((ToolResult(reply, details=details, links=links),), warned)
 
     async def _execute(self, call: ToolCall, language: Language) -> _Execution:
         tool = self._tools.get(call.name)

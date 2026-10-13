@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
@@ -46,14 +46,25 @@ def render(reply: Reply, translator: Translator, language: Language) -> str:
 
 
 @dataclass(frozen=True)
+class Link:
+    """A clickable entry in the HUD: a web page, or a file found on this PC."""
+
+    title: str
+    target: str  # an http(s) address or a file path
+    kind: Literal["web", "file"]
+    note: str = ""  # a second, smaller line: source and time, folder...
+
+
+@dataclass(frozen=True)
 class ToolResult:
     reply: Reply
-    details: str | None = None  # the full picture, for the HUD (Phase 5); logged for now
+    details: str | None = None  # the full picture, shown in the HUD and logged
     # Set when the action needs a spoken "yes" first (ADR-025): it runs only once confirmed.
     on_confirm: Callable[[], Awaitable[ToolResult]] | None = None
     # Facts for the LLM to answer from. When the LLM called the tool and this is set, the LLM
     # words the reply (e.g. "Will it rain?"); otherwise the tool's own reply is spoken.
     model_data: str | None = None
+    links: tuple[Link, ...] = ()  # files, stories or sources, listed in the HUD
 
 
 class Tool[P: BaseModel](ABC):
