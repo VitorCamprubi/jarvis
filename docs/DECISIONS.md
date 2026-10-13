@@ -526,3 +526,36 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   the API.
 - **Decision:** A. "Bom dia, Jarvis" / "Good morning, Jarvis" triggers it; weather and news
   are fetched in parallel, and each part fails gracefully on its own.
+
+## ADR-037: PySide6-Essentials for the HUD
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Context:** The HUD is a frameless, semi-transparent, always-on-top window that never
+  takes the focus, plus a tray icon; ADR-004 already puts Qt on the main thread.
+- **Options:** **A) `PySide6-Essentials` 6.12** (official Qt for Python, LGPL, 78 MB:
+  only QtCore, QtGui and QtWidgets); **B) PyQt6** (same API, GPL: the repository would have
+  to leave MIT); **C) Tkinter + pystray** (no download, but no real translucency or smooth
+  animation on Windows, and pystray is unmaintained since 2023).
+- **Decision:** A. The full `PySide6` package would also pull in WebEngine and PDF.
+
+## ADR-038: HUD drawn with QPainter
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Options:** **A) Qt widgets, with the reactor and gauges painted in code (QPainter)**;
+  **B) Qt Quick / QML** (GPU-smooth, but a second language and a Python↔QML bridge, harder
+  to test); **C) pre-rendered images or GIFs per state** (static, blurry when scaled).
+- **Decision:** A. Everything stays in Python and can be rendered to an image in tests.
+  The reactor animates at 30 fps only while listening, thinking or speaking; at rest it
+  pulses slowly, keeping CPU use near zero.
+
+## ADR-039: A compact HUD panel
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Options:** **A) a compact fixed panel** (about 380 × 300, top right, draggable, position
+  remembered): reactor coloured by state, language, CPU/GPU/RAM, API spending, what was
+  heard and the reply, plus an extra area for clickable lists and details that folds away
+  after 60 s; **B) an orb at rest** that grows into the panel when active (less in the
+  way, but two layouts and animated resizing); **C) a large panel** with the history of
+  the last exchanges (takes a lot of screen).
+- **Decision:** A. The tray icon shows, hides and quits; web links open in the browser and
+  files open through the same safe path as voice (programs are only shown, never run).
