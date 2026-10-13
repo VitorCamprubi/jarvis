@@ -111,6 +111,13 @@ input_per_mtok = 0.10
 output_per_mtok = 0.50
 cache_write_per_mtok = 0.125
 cache_read_per_mtok = 0.01
+web_search_usd = 0.01         # per search (US$ 10 per 1,000), on top of the tokens
+
+[search]
+# Web search through Claude's own search tool (ADR-034).
+enabled = true
+max_per_question = 2
+daily_limit = 20              # searches per day; then JARVIS says it cannot search until tomorrow
 
 [files]
 # Folders searched by "procura o arquivo..." (ADR-031). "~" is your user folder.
@@ -133,3 +140,61 @@ country_code = "BR"
 latitude = -23.50167
 longitude = -47.45806
 timezone = "America/Sao_Paulo"
+
+[news]
+# Tech news from RSS feeds and Google News topics (ADR-035).
+max_age_hours = 24
+per_source_limit = 15         # newest stories kept from each source
+cache_minutes = 15
+request_timeout_s = 6
+duplicate_threshold = 85      # how similar two titles must be to count as the same story
+spoken_stories = 4            # "quais as notícias?"
+briefing_stories = 3          # the morning briefing
+
+[[news.feeds]]
+name = "Tecnoblog"
+url = "https://tecnoblog.net/feed/"
+language = "pt"
+
+[[news.feeds]]
+name = "Canaltech"
+url = "https://canaltech.com.br/rss/"
+language = "pt"
+
+[[news.feeds]]
+name = "Olhar Digital"
+url = "https://olhardigital.com.br/feed/"
+language = "pt"
+
+[[news.feeds]]
+name = "Tecmundo"
+url = "https://rss.tecmundo.com.br/feed"
+language = "pt"
+
+[[news.feeds]]
+name = "The Verge"
+url = "https://www.theverge.com/rss/index.xml"
+language = "en"
+
+[[news.feeds]]
+name = "Ars Technica"
+url = "https://feeds.arstechnica.com/arstechnica/index"
+language = "en"
+
+[[news.feeds]]
+name = "TechCrunch"
+url = "https://techcrunch.com/feed/"
+language = "en"
+
+[[news.topics]]
+# Google News searches; a topic spoken in a request ("notícias sobre Apple") is searched the same way.
+query = "tecnologia"
+language = "pt"
+
+[[news.topics]]
+query = "inteligência artificial"
+language = "pt"
+
+[[news.topics]]
+query = "mercado de trabalho tecnologia"
+language = "pt"

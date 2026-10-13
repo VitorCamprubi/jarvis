@@ -114,11 +114,47 @@ class BudgetConfig(_Section):
     output_per_mtok: float = Field(ge=0)
     cache_write_per_mtok: float = Field(ge=0)
     cache_read_per_mtok: float = Field(ge=0)
+    web_search_usd: float = Field(ge=0)  # per search
 
     @model_validator(mode="after")
     def _warn_before_stop(self) -> Self:
         if self.warn_usd > self.stop_usd:
             raise ValueError("budget.warn_usd cannot exceed budget.stop_usd")
+        return self
+
+
+class SearchConfig(_Section):
+    enabled: bool
+    max_per_question: int = Field(ge=1, le=5)
+    daily_limit: int = Field(ge=0, le=500)
+
+
+class NewsFeed(_Section):
+    name: str = Field(min_length=1)
+    url: HttpUrlText
+    language: Language
+
+
+class NewsTopic(_Section):
+    query: str = Field(min_length=1)
+    language: Language
+
+
+class NewsConfig(_Section):
+    max_age_hours: float = Field(gt=0, le=72)
+    per_source_limit: int = Field(ge=1, le=50)
+    cache_minutes: float = Field(ge=0, le=240)
+    request_timeout_s: float = Field(gt=0, le=30)
+    duplicate_threshold: int = Field(ge=50, le=100)
+    spoken_stories: int = Field(ge=1, le=8)
+    briefing_stories: int = Field(ge=1, le=5)
+    feeds: list[NewsFeed]
+    topics: list[NewsTopic]
+
+    @model_validator(mode="after")
+    def _has_sources(self) -> Self:
+        if not self.feeds and not self.topics:
+            raise ValueError("news needs at least one feed or topic")
         return self
 
 
@@ -158,9 +194,11 @@ class AppConfig(_Section):
     volume: VolumeConfig
     brain: BrainConfig
     budget: BudgetConfig
+    search: SearchConfig
     files: FilesConfig
     reminders: RemindersConfig
     weather: WeatherConfig
+    news: NewsConfig
 
     @model_validator(mode="after")
     def _check_vad_timings(self) -> Self:
