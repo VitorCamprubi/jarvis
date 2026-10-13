@@ -487,3 +487,42 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   transcribed as nonsense.
 - **Decision:** A. "Jarvis, speak English" / "fala em português" lock, "auto language" /
   "volta ao automático" unlock; the lock is stored and survives restarts.
+
+## ADR-034: Web search through Claude's own search tool
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Context:** The brief asked for free DuckDuckGo search. Measured on 2026-10-13: the
+  `ddgs` library's DuckDuckGo backend was blocked after the first query, and its
+  multi-engine fallback answered 3 of 6 queries in 3–4 s. Both scrape result pages, so they
+  break whenever the sites change.
+- **Options:** **A) Claude's server-side `web_search` tool** (official; results come with
+  sources; measured 5.3 s and US$ 0.012 per search on Haiku 5.5); **B) `ddgs`** (free,
+  unreliable as measured); **C) the free Wikipedia and DuckDuckGo Instant Answer APIs**
+  (stable, but encyclopaedic topics only).
+- **Decision:** A. At most 2 searches per question and 20 per day (configurable); each
+  search adds US$ 0.01 to the local budget. The brain offers the tool only while today's
+  limit lasts, answers only from the results and says when it found nothing. Sources are
+  logged (and shown in the HUD from Phase 5).
+
+## ADR-035: News from RSS, chosen and summarised by Claude
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Options:** **A) Claude picks and summarises:** feeds are fetched in parallel, kept to the
+  last 24 h and de-duplicated by similar titles; only titles, sources and times go to the
+  model, which picks the 3–5 main stories and tells them in the reply language (about
+  US$ 0.001); **B) no LLM:** rank stories by how many sources carry them and read the
+  titles; **C) Claude reads the full articles:** better summaries, about ten times the
+  tokens and much slower.
+- **Decision:** A, with B as the fallback when the LLM is offline, not configured or out of
+  budget. Feeds are parsed with `feedparser` (6.0.14, tested on Python 3.14) and cached for
+  15 minutes. Sources and Google News topics live in the configuration.
+
+## ADR-036: Morning briefing assembled locally
+
+- **Date:** 2026-10-13 · **Status:** Accepted
+- **Options:** **A) a fixed running order assembled by JARVIS:** greeting, today's weather,
+  today's reminders, then the three main stories from ADR-035; **B) one LLM call writes the
+  whole briefing from the data:** more natural, less predictable, and fully dependent on
+  the API.
+- **Decision:** A. "Bom dia, Jarvis" / "Good morning, Jarvis" triggers it; weather and news
+  are fetched in parallel, and each part fails gracefully on its own.
