@@ -8,6 +8,7 @@ import asyncio
 import logging
 import platform
 import time
+from collections.abc import Callable
 from typing import Any
 
 import anthropic
@@ -25,10 +26,12 @@ from jarvis.brain.digest import NewsDigest
 from jarvis.brain.persona import system_prompt
 from jarvis.brain.provider import WebSearch
 from jarvis.config import AppConfig, ConfigError, TtsConfig, load_config, load_secrets
+from jarvis.core.events import SpendingChanged
 from jarvis.core.language import LanguagePolicy
 from jarvis.core.pipeline import Pipeline
 from jarvis.core.runtime import CoreRuntime
 from jarvis.core.verification import AcceptEveryone
+from jarvis.hud import Hud, watch_load
 from jarvis.i18n import Language, Translator
 from jarvis.log import setup_logging, shutdown_logging
 from jarvis.router import Router
@@ -97,9 +100,22 @@ def _run(config: AppConfig) -> int:
         paths.DATA_DIR / "voices",
     )
     translator = Translator.load()
+    # Qt must start on the main thread, before anything posts to the HUD (ADR-004).
+    hud = (
+        Hud(
+            config.hud,
+            translator,
+            config.language.default,
+            config.budget.stop_usd,
+            paths.DATA_DIR / "hud.ini",
+        )
+        if config.hud.enabled
+        else None
+    )
     db = Database(paths.DATA_DIR / "jarvis.db")
     policy = LanguagePolicy(SettingsStore(db))
-    llm = _build_llm(config, UsageStore(db))
+    on_spending = (lambda spent: hud.post(SpendingChanged(spent))) if hud else None
+    llm = _build_llm(config, UsageStore(db), on_spending)
     services = Services(
         app_index=AppIndex(config.apps.match_threshold, config.apps.refresh_minutes * 60),
         file_index=FileIndex(
@@ -133,15 +149,24 @@ def _run(config: AppConfig) -> int:
         silence_ms=config.vad.silence_ms,
         confirmation_timeout_s=config.confirmation.timeout_s,
     )
+    if hud is not None:
+        pipeline.subscribe(hud.post)
 
     runtime = CoreRuntime()
     runtime.start()
     # The hotkey thread never touches the pipeline: it asks the core loop to do it.
     hotkey_listener = HotkeyListener(hotkey, on_press=lambda: runtime.call_soon(pipeline.activate))
     try:
-        startup = runtime.submit(_start_up(pipeline, stt, piper, services, db))
+        startup = runtime.submit(
+            _start_up(pipeline, stt, piper, services, db, llm[1] if llm else None)
+        )
         hotkey_listener.start()
         log.info("Press %s to talk. Ctrl+C quits.", config.activation.hotkey.upper())
+        if hud is not None:
+            runtime.submit(watch_load(hud.post, config.hud.load_seconds))
+            code = hud.run(startup)
+            log.info("Shutting down. Goodbye, sir.")
+            return code
         while True:
             if startup.done() and startup.exception() is not None:
                 log.error("Start-up failed: %s", startup.exception())
@@ -158,7 +183,9 @@ def _run(config: AppConfig) -> int:
         db.close()
 
 
-def _build_llm(config: AppConfig, usage: UsageStore) -> tuple[ClaudeProvider, BudgetGuard] | None:
+def _build_llm(
+    config: AppConfig, usage: UsageStore, on_spending: Callable[[float], None] | None = None
+) -> tuple[ClaudeProvider, BudgetGuard] | None:
     """Claude and its spending guard, or None without an API key (rules only)."""
     secrets = load_secrets(paths.ENV_FILE)
     if secrets.anthropic_api_key is None:
@@ -170,7 +197,8 @@ def _build_llm(config: AppConfig, usage: UsageStore) -> tuple[ClaudeProvider, Bu
         max_retries=1,
     )
     log.info("LLM: %s (effort %s)", config.brain.model, config.brain.effort)
-    return ClaudeProvider(client, config.brain), BudgetGuard(usage, config.budget)
+    budget = BudgetGuard(usage, config.budget, on_change=on_spending)
+    return ClaudeProvider(client, config.brain), budget
 
 
 def _build_brain(
@@ -206,10 +234,17 @@ def _build_brain(
 
 
 async def _start_up(
-    pipeline: Pipeline, stt: WhisperStt, piper: PiperTts, services: Services, db: Database
+    pipeline: Pipeline,
+    stt: WhisperStt,
+    piper: PiperTts,
+    services: Services,
+    db: Database,
+    budget: BudgetGuard | None,
 ) -> None:
     await db.open()
     await services.language.load()
+    if budget is not None:
+        await budget.status()  # shows the spending on the HUD
     log.info("Loading the speech model (the first run downloads it)...")
     # The indexes load meanwhile; a search would also reload them on demand.
     indexes = [
