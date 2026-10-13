@@ -180,3 +180,18 @@ night = "Trabalhando até tarde, senhor? Eis o seu resumo."
 none = "Não há lembretes para hoje."
 one = "Para hoje há um lembrete: {text}, às {time}."
 many = "Para hoje há {count} lembretes; o primeiro é {text}, às {time}."
+
+[hud]
+you = "Você"
+spending = "Gasto da API: US$ {spent:.2f} de {stop:.2f}"
+more = "e mais {count}"
+show = "Mostrar HUD"
+hide = "Esconder HUD"
+quit = "Encerrar o JARVIS"
+
+[hud.state]
+starting = "INICIANDO"
+idle = "EM ESPERA"
+listening = "OUVINDO"
+thinking = "PENSANDO"
+speaking = "FALANDO"

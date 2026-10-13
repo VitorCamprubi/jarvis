@@ -180,3 +180,18 @@ night = "Burning the midnight oil, sir? Here is your briefing."
 none = "You have no reminders today."
 one = "You have one reminder today: {text}, at {time}."
 many = "You have {count} reminders today; the first is {text}, at {time}."
+
+[hud]
+you = "You"
+spending = "API spend: US$ {spent:.2f} of {stop:.2f}"
+more = "and {count} more"
+show = "Show HUD"
+hide = "Hide HUD"
+quit = "Quit JARVIS"
+
+[hud.state]
+starting = "STARTING UP"
+idle = "STANDING BY"
+listening = "LISTENING"
+thinking = "THINKING"
+speaking = "SPEAKING"
