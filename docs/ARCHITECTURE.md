@@ -9,7 +9,7 @@ only carry a docstring describing their future responsibility.
 |---|---|---|
 | `jarvis.app` | Composition root: builds the components and wires them together | Phase 0 |
 | `jarvis.config` | Layered TOML configuration and secrets | Phase 0 |
-| `jarvis.core` | Core event loop thread, conversation pipeline, states, speaker-verification hook | Phase 1 |
+| `jarvis.core` | Core event loop thread, conversation pipeline, states, events for observers, speaker-verification hook | Phase 1 |
 | `jarvis.activation` | Global hotkey (Win32 `RegisterHotKey`); wake word in Phase 6 | Phase 1 |
 | `jarvis.audio` | Microphone capture, Silero VAD + loudness gate, feedback tones, playback | Phase 1 |
 | `jarvis.stt` | faster-whisper on CUDA, language restricted to pt/en | Phase 1 |
@@ -143,7 +143,7 @@ See [ADR-004](DECISIONS.md#adr-004-concurrency-asyncio-core-worker-threads-qt-on
 ```mermaid
 flowchart TB
     subgraph main["Main thread"]
-        HUD["Console now; Qt event loop (HUD, tray) from Phase 5"]
+        HUD["Qt event loop: HUD window, tray icon"]
     end
     subgraph core["Core thread"]
         LOOP["asyncio loop: pipeline, VAD, HTTP, timers"]
@@ -158,5 +158,25 @@ flowchart TB
     MIC["PortAudio callback thread"] -- audio frames --> LOOP
     LOOP -- "asyncio.to_thread" --> W
     LOOP -- "run_in_executor" --> SQL
-    LOOP -. "Qt signals (Phase 5)" .-> HUD
+    LOOP -- "events through a Qt signal (queued)" --> HUD
 ```
+
+## HUD
+
+The core never calls the HUD: the pipeline, the budget guard and a load sampler publish
+plain events (`jarvis.core.events`) on the core thread, and `Hud.post` emits them through a
+Qt signal, which Qt queues to the main thread (ADR-004, ADR-037).
+
+| Event | Shown as |
+|---|---|
+| `StateChanged` | Reactor colour and pace, state label (standing by, listening, thinking, speaking) |
+| `UserSpoke`, `JarvisSpoke` | What was heard and the reply; the labels follow the reply language |
+| `Shown` | Clickable links (files, news, search sources) or the details text; folds away after 60 s |
+| `SpendingChanged` | "API spend: US$ 0.08 of 4.90" |
+| `LoadSampled` | CPU, GPU, VRAM and RAM gauges, sampled every 2 s on a worker thread |
+
+The window is frameless, translucent and always on top, and it never takes the focus
+(`WindowDoesNotAcceptFocus`, `WA_ShowWithoutActivating`). The reactor is painted with
+QPainter at 30 fps only while active (ADR-038); measured: 0% CPU at rest, about 3% while
+speaking. Link titles come from the web, so they are always HTML-escaped; only http(s) links
+open, and files open through the same safe path as by voice.

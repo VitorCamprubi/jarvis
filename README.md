@@ -4,10 +4,10 @@ Personal bilingual (Brazilian Portuguese / English) voice assistant for Windows,
 J.A.R.V.I.S. from the Iron Man films: push a key or say its name, ask, and it acts on the PC,
 searches the web and answers out loud, in the manner of a formal British butler.
 
-> **Status:** work in progress, Phase 4 (web): simple commands are resolved locally by
+> **Status:** work in progress, Phase 5 (HUD): simple commands are resolved locally by
 > rules; everything else goes to Claude Haiku, which can use the same tools and search the
-> web. A full bilingual README with demo, architecture diagram and installation guide arrives
-> in the final phase.
+> web; a floating heads-up display shows what is going on. A full bilingual README with demo,
+> architecture diagram and installation guide arrives in the final phase.
 
 ## What it can do so far
 
@@ -63,7 +63,14 @@ uv run jarvis
 ```
 
 Then press **Ctrl+Alt+J**, speak, and wait for the reply. Press the hotkey again while it is
-listening to cancel; Ctrl+C in the console quits.
+listening to cancel.
+
+The HUD floats in the top right corner (drag it anywhere; it remembers the place): the
+reactor shows whether JARVIS is standing by, listening, thinking or speaking, next to the
+language, CPU/GPU/VRAM/RAM load and API spending; below come what you said, the reply, and
+clickable lists of files, news or search sources. It never takes the keyboard focus. The tray
+icon shows or hides it and quits JARVIS (so does Ctrl+C in the console); set
+`[hud] enabled = false` for the console only.
 
 | Command | What it does |
 |---|---|
