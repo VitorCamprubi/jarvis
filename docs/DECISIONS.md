@@ -403,7 +403,7 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
 
 ## ADR-027: Adaptive thinking at low effort
 
-- **Date:** 2026-10-12 · **Status:** Accepted (to be confirmed by measurement)
+- **Date:** 2026-10-12 · **Status:** Accepted, confirmed by measurement (2026-10-13)
 - **Context:** Voice replies must start within about 4 s when the LLM is involved.
 - **Options:** **A) adaptive thinking, `effort: "low"`** (Anthropic's recommendation for chat
   and short tool tasks; the model may skip thinking on simple requests); **B) thinking
@@ -411,6 +411,10 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   `medium` effort** (better reasoning, slower and dearer).
 - **Decision:** A. Effort is a configuration value; A and B will be measured with the real
   API key before the phase closes.
+- **Measured (2026-10-13, Haiku 5.5, 6 requests each):** A and B both answer in 1.0–1.5 s
+  per request and both called the right tools (reminder, weather); B gave terser
+  follow-ups ("Em 1500, senhor."). Tools and the system prompt (2,916 tokens) are cached
+  from the second request on. Twelve requests cost about US$ 0.0017. A stays.
 
 ## ADR-028: Text-only short-term memory
 
