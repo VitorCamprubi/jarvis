@@ -15,7 +15,15 @@ from jarvis.core.language import LanguagePolicy
 from jarvis.i18n import Language
 from jarvis.router import Router
 from jarvis.storage import Database, ReminderStore
-from jarvis.tools import AppIndex, FileIndex, ResultList, Services, WeatherClient, build_tools
+from jarvis.tools import (
+    AppIndex,
+    FileIndex,
+    NewsService,
+    ResultList,
+    Services,
+    WeatherClient,
+    build_tools,
+)
 from jarvis.tools.base import Tool
 from jarvis.tools.reminders import ReminderService
 
@@ -29,6 +37,7 @@ def all_tools() -> list[Tool[Any]]:
         results=ResultList(),
         weather=WeatherClient(),
         reminders=ReminderService(ReminderStore(Database(":memory:"))),
+        news=NewsService(config.news),
         language=LanguagePolicy(),
         reply_language=lambda: Language.PT,
     )
@@ -92,6 +101,13 @@ ROUTER = Router(all_tools())
         ("Onde está o relatório mensal?", "search_files", {"query": "relatorio mensal"}),
         ("Abre o segundo.", "open_search_result", {"position": 2}),
         ("Abre o primeiro arquivo.", "open_search_result", {"position": 1}),
+        ("Quais são as notícias de hoje?", "news", {"topic": None}),
+        ("Me dá as principais notícias.", "news", {"topic": None}),
+        ("Notícias sobre inteligência artificial.", "news", {"topic": "inteligencia artificial"}),
+        ("O que há de novo sobre a Apple?", "news", {"topic": "apple"}),
+        ("Jarvis, bom dia!", "morning_briefing", {}),
+        ("Bom dia, Jarvis.", "morning_briefing", {}),
+        ("Me dá o resumo do dia.", "morning_briefing", {}),
         # English
         ("Open Spotify.", "open_app", {"name": "spotify"}),
         ("Launch Visual Studio Code.", "open_app", {"name": "visual studio code"}),
@@ -127,6 +143,12 @@ ROUTER = Router(all_tools())
         ("Will it rain tomorrow in London?", "weather", {"when": "tomorrow", "city": "london"}),
         ("Find the file report.", "search_files", {"query": "report"}),
         ("Open the second one.", "open_search_result", {"position": 2}),
+        ("What's the news today?", "news", {"topic": None}),
+        ("Give me the latest tech news.", "news", {"topic": None}),
+        ("Any news about Nvidia?", "news", {"topic": "nvidia"}),
+        ("What's new in AI?", "news", {"topic": "ai"}),
+        ("Good morning, Jarvis.", "morning_briefing", {}),
+        ("Morning briefing.", "morning_briefing", {}),
     ],
 )
 def test_phrase_routes_to_tool(spoken: str, tool: str, args: dict[str, object]) -> None:
@@ -147,6 +169,13 @@ def test_phrase_routes_to_tool(spoken: str, tool: str, args: dict[str, object]) 
         "Toca Despacito.",  # playing a specific song is not supported
         "Volume alto.",  # not a number
         "Me conta uma piada.",
+        # web search: the LLM searches (ADR-034), never the file search
+        "Pesquisa quem ganhou o jogo do Palmeiras.",
+        "Procura na internet o preço do dólar.",
+        "Busca no Google a previsão do Corinthians.",
+        "Search the web for the latest Python release.",
+        "Find the opening hours of the Louvre online.",
+        "Bom dia, tudo bem com você?",
     ],
 )
 def test_phrase_matches_no_rule(spoken: str) -> None:

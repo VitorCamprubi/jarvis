@@ -13,11 +13,13 @@ from jarvis.core.language import LanguagePolicy
 from jarvis.i18n import Language
 from jarvis.tools.apps import AppIndex, OpenAppTool
 from jarvis.tools.base import Intent, Reply, Tool, ToolResult, render
+from jarvis.tools.briefing import BriefingTool
 from jarvis.tools.close import CloseAppTool
 from jarvis.tools.files import FileIndex, OpenResultTool, ResultList, SearchFilesTool
 from jarvis.tools.language import SetLanguageTool
 from jarvis.tools.lock import LockTool
 from jarvis.tools.media import MediaTool
+from jarvis.tools.news import NewsService, NewsTool
 from jarvis.tools.power import PowerTool
 from jarvis.tools.reminders import (
     CancelReminderTool,
@@ -41,6 +43,7 @@ class Services:
     results: ResultList
     weather: WeatherClient
     reminders: ReminderService
+    news: NewsService
     language: LanguagePolicy
     reply_language: Callable[[], Language]  # the language JARVIS is answering in right now
 
@@ -48,6 +51,7 @@ class Services:
 def build_tools(config: AppConfig, services: Services) -> list[Tool[Any]]:
     """All tools, in the order the router tries them: specific phrasings before generic ones
     ("open the second one" before "open <anything>", which comes last)."""
+    weather = WeatherTool(services.weather, config.weather, services.reply_language)
     return [
         SystemStatusTool(),
         MediaTool(),
@@ -61,7 +65,15 @@ def build_tools(config: AppConfig, services: Services) -> list[Tool[Any]]:
         ),
         ListRemindersTool(services.reminders),
         CancelReminderTool(services.reminders),
-        WeatherTool(services.weather, config.weather, services.reply_language),
+        weather,
+        NewsTool(services.news, services.reply_language, config.news.spoken_stories),
+        BriefingTool(
+            weather,
+            services.reminders,
+            services.news,
+            services.reply_language,
+            config.news.briefing_stories,
+        ),
         OpenResultTool(services.results),
         SearchFilesTool(
             services.file_index,
@@ -78,6 +90,7 @@ __all__ = [
     "AppIndex",
     "FileIndex",
     "Intent",
+    "NewsService",
     "Reply",
     "ResultList",
     "Services",

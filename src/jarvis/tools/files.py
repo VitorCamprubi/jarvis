@@ -12,7 +12,7 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +40,9 @@ ORDINALS = {
     "quinto": 5, "quinta": 5, "fifth": 5,
     "ultimo": -1, "ultima": -1, "last": -1,
 }  # fmt: skip
+WEB_WORDS = re.compile(
+    r"\b(?:na internet|na web|no google|on the internet|on the web|on google|online)\b"
+)
 
 
 def spoken_file_name(path: Path) -> str:
@@ -149,6 +152,10 @@ class SearchFilesTool(Tool[SearchFilesParams]):
         self._results = results
         self._limit = limit
         self._threshold = threshold
+
+    def accepts(self, args: Mapping[str, object]) -> bool:
+        # "Procura na internet ..." is a web search: leave it to the LLM (ADR-034).
+        return not WEB_WORDS.search(str(args.get("query", "")))
 
     async def run(self, params: SearchFilesParams) -> ToolResult:
         paths = await self._index.search(params.query, self._limit, self._threshold)

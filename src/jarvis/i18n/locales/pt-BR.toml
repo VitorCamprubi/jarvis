@@ -153,3 +153,30 @@ generic = [
     "Lamento muito, senhor. Algo deu errado do meu lado.",
     "Minhas desculpas, senhor. Parece que tropecei nos meus próprios circuitos.",
 ]
+
+[news]
+bulletin = "{text}"
+headlines = "As principais manchetes, senhor: {titles}."
+none = "Não encontrei notícias recentes de tecnologia, senhor. Parece um dia tranquilo."
+none_about = "Não encontrei notícias recentes sobre {topic}, senhor."
+unavailable = [
+    "Receio que as fontes de notícias não estejam respondendo no momento, senhor.",
+    "A redação parece fechada por ora, senhor. Não consegui acessar nenhuma das fontes.",
+]
+
+[briefing]
+full = "{greeting} {weather} {reminders} {news}"
+
+[briefing.greeting]
+morning = [
+    "Bom dia, senhor. Eis o seu resumo do dia.",
+    "Bom dia, Sr. Camprubi. Permita-me colocá-lo a par do dia.",
+]
+afternoon = "Boa tarde, senhor. Eis o seu resumo, um pouco mais tarde que o habitual."
+evening = "Boa noite, senhor. Eis o seu resumo; antes tarde do que nunca."
+night = "Trabalhando até tarde, senhor? Eis o seu resumo."
+
+[briefing.reminders]
+none = "Não há lembretes para hoje."
+one = "Para hoje há um lembrete: {text}, às {time}."
+many = "Para hoje há {count} lembretes; o primeiro é {text}, às {time}."

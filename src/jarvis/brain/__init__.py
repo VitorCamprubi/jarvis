@@ -1,7 +1,9 @@
-"""The LLM side of JARVIS: provider interface, Claude, persona, memory, budget, tool loop."""
+"""The LLM side of JARVIS: provider interface, Claude, persona, memory, budget, tool loop,
+news bulletin."""
 
 from jarvis.brain.agent import Brain, BrainAnswer
 from jarvis.brain.budget import BudgetGuard, BudgetState, BudgetStatus
+from jarvis.brain.digest import NewsDigest
 from jarvis.brain.memory import ConversationMemory
 from jarvis.brain.provider import LLMProvider
 
@@ -13,4 +15,5 @@ __all__ = [
     "BudgetStatus",
     "ConversationMemory",
     "LLMProvider",
+    "NewsDigest",
 ]

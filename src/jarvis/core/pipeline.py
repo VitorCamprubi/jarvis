@@ -27,6 +27,7 @@ from jarvis.log import TRANSCRIPT_LOGGER
 from jarvis.router import Router
 from jarvis.stt.base import SpeechToText, Transcript
 from jarvis.text import Answer, classify_answer
+from jarvis.text.when import part_of_day
 from jarvis.tools.base import Reply, ToolResult, render
 from jarvis.tts.base import TextToSpeech
 
@@ -37,13 +38,7 @@ StateListener = Callable[[State], None]
 
 
 def greeting_key(hour: int) -> str:
-    if 5 <= hour < 12:
-        return "startup.morning"
-    if 12 <= hour < 18:
-        return "startup.afternoon"
-    if hour >= 18:
-        return "startup.evening"
-    return "startup.night"
+    return f"startup.{part_of_day(hour)}"
 
 
 @dataclass(frozen=True)

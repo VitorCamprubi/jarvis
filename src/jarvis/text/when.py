@@ -55,6 +55,17 @@ class TimeMatch:
     spans: tuple[Span, ...]  # where the time expression is, in the normalised text
 
 
+def part_of_day(hour: int) -> str:
+    """ "morning", "afternoon", "evening" or "night", for greetings."""
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 18:
+        return "afternoon"
+    if hour >= 18:
+        return "evening"
+    return "night"
+
+
 def find_time(text: str, now: datetime, default_hour: int) -> TimeMatch | None:
     """The moment described in ``text`` (normalised), or None if there is none."""
     relative = _relative(text, now)
