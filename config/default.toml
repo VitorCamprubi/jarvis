@@ -141,6 +141,13 @@ latitude = -23.50167
 longitude = -47.45806
 timezone = "America/Sao_Paulo"
 
+[hud]
+# The heads-up display and tray icon (ADR-037 to ADR-039).
+enabled = true
+opacity = 0.88
+details_seconds = 60          # lists and details fold away after this
+load_seconds = 2              # CPU/GPU/RAM refresh
+
 [news]
 # Tech news from RSS feeds and Google News topics (ADR-035).
 max_age_hours = 24

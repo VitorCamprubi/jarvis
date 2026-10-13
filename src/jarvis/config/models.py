@@ -170,6 +170,13 @@ class RemindersConfig(_Section):
     default_hour: int = Field(ge=0, le=23)  # "amanhã" without a time
 
 
+class HudConfig(_Section):
+    enabled: bool  # false: console only, as in Phases 1 to 4
+    opacity: float = Field(ge=0.3, le=1.0)  # of the panel's background
+    details_seconds: float = Field(ge=5, le=600)  # lists and details fold away after this
+    load_seconds: float = Field(ge=0.5, le=30)  # CPU/GPU/RAM refresh
+
+
 class WeatherConfig(_Section):
     city: str = Field(min_length=1)
     region: str
@@ -199,6 +206,7 @@ class AppConfig(_Section):
     reminders: RemindersConfig
     weather: WeatherConfig
     news: NewsConfig
+    hud: HudConfig
 
     @model_validator(mode="after")
     def _check_vad_timings(self) -> Self:
