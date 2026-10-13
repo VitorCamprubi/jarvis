@@ -38,6 +38,11 @@ MIGRATIONS = [
         value TEXT NOT NULL
     );
     """,
+    # 2: web searches made by the LLM, for the daily limit (ADR-034)
+    """
+    ALTER TABLE llm_usage ADD COLUMN web_searches INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX llm_usage_at ON llm_usage (at);
+    """,
 ]
 
 

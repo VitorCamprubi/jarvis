@@ -85,14 +85,25 @@ class UsageStore:
         model: str,
         tokens: tuple[int, int, int, int],  # input, output, cache write, cache read
         cost_usd: float,
+        web_searches: int = 0,
     ) -> None:
         await self._db.run(
             lambda connection: connection.execute(
                 "INSERT INTO llm_usage (at, model, input_tokens, output_tokens, "
-                "cache_write_tokens, cache_read_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (_to_text(at), model, *tokens, cost_usd),
+                "cache_write_tokens, cache_read_tokens, cost_usd, web_searches) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (_to_text(at), model, *tokens, cost_usd, web_searches),
             )
         )
+
+    async def searches_since(self, moment: datetime) -> int:
+        total = await self._db.run(
+            lambda connection: connection.execute(
+                "SELECT COALESCE(SUM(web_searches), 0) FROM llm_usage WHERE at >= ?",
+                (_to_text(moment),),
+            ).fetchone()[0]
+        )
+        return int(total)
 
     async def total_cost(self) -> float:
         total = await self._db.run(

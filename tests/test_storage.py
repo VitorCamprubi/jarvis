@@ -1,10 +1,12 @@
 import asyncio
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from jarvis.core.language import LanguagePolicy
 from jarvis.i18n import Language
 from jarvis.storage import Database, ReminderStore, SettingsStore, UsageStore
+from jarvis.storage.db import MIGRATIONS
 
 NOW = datetime(2026, 10, 12, 17, 0, tzinfo=UTC)
 
@@ -50,6 +52,41 @@ def test_usage_costs_add_up() -> None:
         return await store.total_cost()
 
     assert abs(asyncio.run(scenario()) - 0.00045) < 1e-12
+
+
+def test_web_searches_are_counted_from_a_moment_on() -> None:
+    async def scenario() -> tuple[int, int]:
+        store = UsageStore(Database(":memory:"))
+        await store.add(NOW - timedelta(days=1), "m", (0, 0, 0, 0), 0.02, web_searches=2)
+        await store.add(NOW, "m", (100, 10, 0, 0), 0.01, web_searches=1)
+        await store.add(NOW, "m", (100, 10, 0, 0), 0.0001)
+        return await store.searches_since(NOW - timedelta(hours=1)), await store.searches_since(
+            NOW - timedelta(days=2)
+        )
+
+    assert asyncio.run(scenario()) == (1, 3)
+
+
+def test_an_existing_database_gains_the_search_column(tmp_path: Path) -> None:
+    path = tmp_path / "jarvis.db"
+    with sqlite3.connect(path) as connection:  # a Phase 3 database: schema version 1
+        connection.executescript(MIGRATIONS[0])
+        connection.execute(
+            "INSERT INTO llm_usage (at, model, input_tokens, output_tokens, cache_write_tokens, "
+            "cache_read_tokens, cost_usd) "
+            "VALUES ('2026-10-12T17:00:00+00:00', 'm', 1, 1, 0, 0, 0.5)"
+        )
+        connection.execute("PRAGMA user_version = 1")
+    connection.close()
+
+    async def scenario() -> tuple[float, int]:
+        db = Database(path)
+        store = UsageStore(db)
+        result = await store.total_cost(), await store.searches_since(NOW - timedelta(days=1))
+        db.close()
+        return result
+
+    assert asyncio.run(scenario()) == (0.5, 0)
 
 
 def test_language_lock_is_stored() -> None:
