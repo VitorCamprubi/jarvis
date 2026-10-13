@@ -9,3 +9,4 @@ The v1 scope is frozen. Ideas that come up during v1 are recorded here and not i
 | Play a specific song or playlist ("toca Despacito") | Phase 2 | Needs the Spotify Web API; v1 only drives the media keys |
 | Force-close a program that ignores the close request | ADR-024 | A second confirmation, then terminate the process |
 | City aliases for weather ("Nova York") | Phase 3 | Open-Meteo knows "Nova Iorque" and "New York" only; a `[weather.aliases]` table like the app aliases |
+| Open a news story by voice ("abre a segunda notícia") | Phase 4 | v1 lists the links in the log and, from Phase 5, in the HUD |

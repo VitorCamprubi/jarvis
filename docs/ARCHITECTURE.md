@@ -19,7 +19,7 @@ only carry a docstring describing their future responsibility.
 | `jarvis.router` | Bilingual rule router (regex per language); unresolved requests go to the LLM | Phase 2 |
 | `jarvis.tools` | Explicit tool list (the allowlist) and one module per tool | Phase 2 |
 | `jarvis.windows` | Windows integration: Start menu, media keys, Core Audio, metrics, windows, session | Phase 2 |
-| `jarvis.brain` | Claude provider, tool-use loop, persona, short memory, budget guard | Phase 3 |
+| `jarvis.brain` | Claude provider, tool-use loop, web search, persona, short memory, budget guard, news bulletin | Phase 3 |
 | `jarvis.storage` | SQLite persistence (reminders, API spending, settings) | Phase 3 |
 | `jarvis.hud` | PySide6 heads-up display and tray icon | Phase 5 |
 
@@ -54,6 +54,12 @@ list in `jarvis/tools/__init__.py` is the allowlist: nothing else can run (ADR-0
 | `create_reminder`, `list_reminders`, `cancel_reminder` | "Me lembra em 20 minutos de tirar a pizza" |
 | `weather` | "Vai chover amanhã?", "Como está o tempo em Londres?" (Open-Meteo, ADR-032) |
 | `search_files`, `open_search_result` | "Procura o arquivo currículo", "Abre o segundo" (ADR-031) |
+| `news` | "Quais as notícias de hoje?", "Notícias sobre IA" (RSS and Google News, ADR-035) |
+| `morning_briefing` | "Bom dia, Jarvis": greeting, weather, today's reminders, three stories (ADR-036) |
+
+Web search is not a tool of ours: it runs inside the Claude request (ADR-034), so "Pesquisa
+quem ganhou o jogo" or "Search the web for…" reach the brain. The file search declines
+requests that mention the internet ("procura na internet…").
 
 ## Brain
 
@@ -68,6 +74,7 @@ flowchart TB
     C -- tool calls --> T[Run allowlisted tools]
     T -- action tools --> R[Speak their own replies]
     T -- "model_data (forecast, files)" --> C
+    C -- "web search (inside the request)" --> C
 ```
 
 - **Prompt caching:** the persona and the tool schemas never change during a run, so they
@@ -76,8 +83,16 @@ flowchart TB
   text (ADR-028).
 - **Budget:** every request's tokens and estimated cost go to SQLite; JARVIS warns at
   US$ 4.00 and stops calling the API at US$ 4.90, below the US$ 5 credit (ADR-010).
-- **Safety:** tool output is data, never instructions; unknown tools and invalid arguments
-  are refused; shutdown, restart and closing programs still need a spoken yes.
+- **Web search (ADR-034):** Claude's own search tool is offered while today's limit lasts
+  (20 searches, at most 2 per question, US$ 0.01 each); the answer must come from the results
+  or say nothing was found. Text blocks that merely paste the cited page are not spoken, and
+  the sources are logged for the HUD.
+- **News (ADR-035):** `NewsService` reads the feeds in parallel (cached 15 minutes), keeps the
+  last 24 hours, merges near-identical titles and asks `NewsDigest` (a separate small request)
+  for the bulletin; without the LLM the most widely carried headlines are read.
+- **Safety:** tool output, search results and headlines are data, never instructions;
+  unknown tools and invalid arguments are refused; shutdown, restart and closing programs
+  still need a spoken yes.
 - **Storage:** `jarvis.storage.Database` runs `sqlite3` on its own single thread; schema
   changes are numbered migrations (`PRAGMA user_version`, ADR-029).
 

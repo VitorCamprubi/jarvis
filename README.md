@@ -4,9 +4,10 @@ Personal bilingual (Brazilian Portuguese / English) voice assistant for Windows,
 J.A.R.V.I.S. from the Iron Man films: push a key or say its name, ask, and it acts on the PC,
 searches the web and answers out loud, in the manner of a formal British butler.
 
-> **Status:** work in progress, Phase 3 (brain): simple commands are resolved locally by
-> rules; everything else goes to Claude Haiku, which can use the same tools. A full bilingual
-> README with demo, architecture diagram and installation guide arrives in the final phase.
+> **Status:** work in progress, Phase 4 (web): simple commands are resolved locally by
+> rules; everything else goes to Claude Haiku, which can use the same tools and search the
+> web. A full bilingual README with demo, architecture diagram and installation guide arrives
+> in the final phase.
 
 ## What it can do so far
 
@@ -23,6 +24,9 @@ searches the web and answers out loud, in the manner of a formal British butler.
 | "Vai chover amanhã?" / "What's the weather like in London?" | Weather now, today or tomorrow (Open-Meteo, no key) |
 | "Procura o arquivo currículo", "Abre o segundo" / "Find the file report" | Searches Desktop, Documents and Downloads; programs are only shown, never run |
 | "Fala em inglês", "Idioma automático" / "Speak Portuguese" | Locks the reply language, or goes back to replying in the language spoken |
+| "Quais as notícias de hoje?", "Notícias sobre IA" / "What's the latest tech news?" | The main tech stories of the last 24 h, from RSS feeds and Google News |
+| "Bom dia, Jarvis" / "Good morning, Jarvis" | Morning briefing: weather, today's reminders and three stories |
+| "Pesquisa quem ganhou o jogo do Flamengo" / "Search the web for…" | Claude searches the web and answers only from what it found (sources in the log) |
 | Anything else: "Quem descobriu o Brasil?", "E amanhã?" | Claude Haiku answers briefly, remembering the last few exchanges |
 
 ## Requirements
@@ -36,7 +40,8 @@ the speech model (~1.5 GB) and the offline voices (~120 MB).
 
 ## Claude API key (optional)
 
-Without a key JARVIS still runs every command in the table above except the free questions.
+Without a key JARVIS still runs every command in the table above except free questions and
+web search; news are then read as plain headlines.
 
 1. In the [Anthropic Console](https://console.anthropic.com/), buy a small amount of credit,
    keep auto-reload off and set a monthly spend limit.
@@ -45,7 +50,9 @@ Without a key JARVIS still runs every command in the table above except the free
 3. `uv run jarvis --check` validates the key without spending tokens.
 
 JARVIS records the estimated cost of every request in `data/jarvis.db`, warns at US$ 4.00
-and stops calling the API at US$ 4.90 (`[budget]` in the configuration).
+and stops calling the API at US$ 4.90 (`[budget]` in the configuration). A question costs
+about US$ 0.0002; a web search about US$ 0.012, so searches are limited to 20 a day
+(`[search]`).
 
 ## Quick start
 
