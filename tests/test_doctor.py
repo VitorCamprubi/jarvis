@@ -2,6 +2,7 @@ import sqlite3
 import subprocess
 from collections.abc import Callable
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -189,3 +190,21 @@ def test_spending_check_sums_the_recorded_cost(
 
     assert result.status is status
     assert f"US$ {spent:.4f}" in result.detail
+
+
+def test_spending_check_counts_todays_web_searches(tmp_path: Path) -> None:
+    db_file = tmp_path / "jarvis.db"
+    with closing(sqlite3.connect(db_file)) as connection, connection:
+        connection.execute("CREATE TABLE llm_usage (at TEXT, cost_usd REAL, web_searches INTEGER)")
+        connection.executemany(
+            "INSERT INTO llm_usage VALUES (?, ?, ?)",
+            [
+                ("2026-10-12T20:00:00+00:00", 0.02, 2),  # yesterday, local time
+                ("2026-10-13T12:00:00+00:00", 0.03, 3),
+            ],
+        )
+    now = datetime(2026, 10, 13, 10, 0, tzinfo=timezone(timedelta(hours=-3)))
+
+    result = check_spending(db_file, stop_usd=4.9, daily_searches=20, now=now)
+
+    assert result.detail.endswith("; 3 of 20 web searches today")

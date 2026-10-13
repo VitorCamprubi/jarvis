@@ -21,7 +21,9 @@ from jarvis.audio.tones import FeedbackSounds
 from jarvis.audio.vad import SileroVad
 from jarvis.brain import Brain, BudgetGuard, ConversationMemory
 from jarvis.brain.claude import ClaudeProvider
+from jarvis.brain.digest import NewsDigest
 from jarvis.brain.persona import system_prompt
+from jarvis.brain.provider import WebSearch
 from jarvis.config import AppConfig, ConfigError, TtsConfig, load_config, load_secrets
 from jarvis.core.language import LanguagePolicy
 from jarvis.core.pipeline import Pipeline
@@ -35,6 +37,7 @@ from jarvis.stt.whisper import WhisperStt
 from jarvis.tools import (
     AppIndex,
     FileIndex,
+    NewsService,
     Reply,
     ResultList,
     Services,
@@ -96,6 +99,7 @@ def _run(config: AppConfig) -> int:
     translator = Translator.load()
     db = Database(paths.DATA_DIR / "jarvis.db")
     policy = LanguagePolicy(SettingsStore(db))
+    llm = _build_llm(config, UsageStore(db))
     services = Services(
         app_index=AppIndex(config.apps.match_threshold, config.apps.refresh_minutes * 60),
         file_index=FileIndex(
@@ -106,6 +110,7 @@ def _run(config: AppConfig) -> int:
         results=ResultList(),
         weather=WeatherClient(),
         reminders=ReminderService(ReminderStore(db)),
+        news=NewsService(config.news, NewsDigest(*llm, config.user) if llm else None),
         language=policy,
         reply_language=lambda: pipeline.reply_language,
     )
@@ -120,7 +125,7 @@ def _run(config: AppConfig) -> int:
         sounds=FeedbackSounds.create(config.audio.feedback_volume),
         translator=translator,
         router=Router(tools),
-        brain=_build_brain(config, tools, UsageStore(db), memory, translator),
+        brain=_build_brain(config, llm, tools, memory, translator) if llm else None,
         memory=memory,
         policy=policy,
         verifier=AcceptEveryone(),
@@ -153,13 +158,8 @@ def _run(config: AppConfig) -> int:
         db.close()
 
 
-def _build_brain(
-    config: AppConfig,
-    tools: list[Tool[Any]],
-    usage: UsageStore,
-    memory: ConversationMemory,
-    translator: Translator,
-) -> Brain | None:
+def _build_llm(config: AppConfig, usage: UsageStore) -> tuple[ClaudeProvider, BudgetGuard] | None:
+    """Claude and its spending guard, or None without an API key (rules only)."""
     secrets = load_secrets(paths.ENV_FILE)
     if secrets.anthropic_api_key is None:
         log.warning("ANTHROPIC_API_KEY is not set: only the local rules will answer")
@@ -170,14 +170,38 @@ def _build_brain(
         max_retries=1,
     )
     log.info("LLM: %s (effort %s)", config.brain.model, config.brain.effort)
+    return ClaudeProvider(client, config.brain), BudgetGuard(usage, config.budget)
+
+
+def _build_brain(
+    config: AppConfig,
+    llm: tuple[ClaudeProvider, BudgetGuard],
+    tools: list[Tool[Any]],
+    memory: ConversationMemory,
+    translator: Translator,
+) -> Brain:
+    provider, budget = llm
+    web_search = None
+    if config.search.enabled and config.search.daily_limit > 0:
+        place = config.weather
+        web_search = WebSearch(
+            config.search.max_per_question,
+            place.city,
+            place.region,
+            place.country_code,
+            place.timezone,
+        )
+        log.info("Web search: up to %d searches a day", config.search.daily_limit)
     return Brain(
-        provider=ClaudeProvider(client, config.brain),
+        provider=provider,
         tools=tools,
-        budget=BudgetGuard(usage, config.budget),
+        budget=budget,
         memory=memory,
         translator=translator,
-        system=system_prompt(config.user, config.weather),
+        system=system_prompt(config.user, config.weather, web_search is not None),
         max_tool_rounds=config.brain.max_tool_rounds,
+        web_search=web_search,
+        daily_searches=config.search.daily_limit,
     )
 
 

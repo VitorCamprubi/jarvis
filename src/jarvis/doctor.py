@@ -9,6 +9,7 @@ import sys
 from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -159,9 +160,13 @@ def check_llm(
 
 
 def check_spending(
-    db_file: Path = paths.DATA_DIR / "jarvis.db", stop_usd: float = 0.0
+    db_file: Path = paths.DATA_DIR / "jarvis.db",
+    stop_usd: float = 0.0,
+    daily_searches: int = 0,
+    now: datetime | None = None,
 ) -> CheckResult:
-    """What the LLM has cost so far, by JARVIS's own estimate (ADR-010)."""
+    """What the LLM has cost so far, by JARVIS's own estimate (ADR-010), and today's web
+    searches against the daily limit (ADR-034)."""
     if not db_file.exists():
         return CheckResult("Spending", Status.OK, "no LLM usage yet")
     try:
@@ -169,12 +174,26 @@ def check_spending(
             spent = connection.execute(
                 "SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage"
             ).fetchone()[0]
+            searches = _searches_today(connection, now or datetime.now().astimezone())
     except sqlite3.Error:
         return CheckResult("Spending", Status.OK, "no LLM usage yet")
     status = Status.WARN if stop_usd and spent >= stop_usd else Status.OK
-    return CheckResult(
-        "Spending", status, f"US$ {spent:.4f} so far (estimate; stops at {stop_usd:.2f})"
-    )
+    detail = f"US$ {spent:.4f} so far (estimate; stops at {stop_usd:.2f})"
+    if daily_searches:
+        detail += f"; {searches} of {daily_searches} web searches today"
+    return CheckResult("Spending", status, detail)
+
+
+def _searches_today(connection: sqlite3.Connection, now: datetime) -> int:
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    try:
+        row = connection.execute(
+            "SELECT COALESCE(SUM(web_searches), 0) FROM llm_usage WHERE at >= ?",
+            (midnight.isoformat(),),
+        ).fetchone()
+    except sqlite3.OperationalError:  # a database from before web search (migration 2)
+        return 0
+    return int(row[0])
 
 
 def run_checks() -> int:
@@ -191,7 +210,10 @@ def run_checks() -> int:
         ]
         results += [
             check_llm(model=config.brain.model),
-            check_spending(stop_usd=config.budget.stop_usd),
+            check_spending(
+                stop_usd=config.budget.stop_usd,
+                daily_searches=config.search.daily_limit if config.search.enabled else 0,
+            ),
         ]
     else:
         results.append(check_llm())
