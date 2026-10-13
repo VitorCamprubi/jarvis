@@ -49,7 +49,7 @@ class BudgetGuard:
             + usage.output_tokens * config.output_per_mtok
             + usage.cache_write_tokens * config.cache_write_per_mtok
             + usage.cache_read_tokens * config.cache_read_per_mtok
-        ) / MILLION
+        ) / MILLION + usage.web_searches * config.web_search_usd
 
     async def status(self) -> BudgetStatus:
         if self._spent is None:
@@ -65,15 +65,21 @@ class BudgetGuard:
             usage.cache_write_tokens,
             usage.cache_read_tokens,
         )
-        await self._store.add(self._clock(), model, tokens, cost)
+        await self._store.add(self._clock(), model, tokens, cost, usage.web_searches)
         self._spent = before.spent_usd + cost
         log.info(
-            "LLM usage: %d in, %d out, %d cache write, %d cache read = US$ %.5f (total US$ %.4f)",
+            "LLM usage: %d in, %d out, %d cache write, %d cache read, %d web searches"
+            " = US$ %.5f (total US$ %.4f)",
             *tokens,
+            usage.web_searches,
             cost,
             self._spent,
         )
         return BudgetStatus(self._spent, self._state(self._spent))
+
+    async def searches_today(self) -> int:
+        midnight = self._clock().replace(hour=0, minute=0, second=0, microsecond=0)
+        return await self._store.searches_since(midnight)
 
     def _state(self, spent: float) -> BudgetState:
         if spent >= self._config.stop_usd:

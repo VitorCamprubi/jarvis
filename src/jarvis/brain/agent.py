@@ -4,12 +4,13 @@ Each request runs a small tool-use loop. Before every LLM call the budget is che
 (ADR-010); only tools from the registry exist (ADR-020); a tool that needs confirmation ends
 the loop and goes back to the pipeline, which asks out loud (ADR-025). Action tools speak
 their own reply directly, which saves a second LLM call; tools that return facts
-(``model_data``) let the LLM word the answer.
+(``model_data``) let the LLM word the answer. Web search runs inside the LLM request while the
+day's search limit lasts (ADR-034).
 """
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -24,11 +25,13 @@ from jarvis.brain.provider import (
     LLMProvider,
     LlmUnavailableError,
     Message,
+    Source,
     ToolCall,
     ToolOutcome,
     ToolResultsMessage,
     ToolSpec,
     UserMessage,
+    WebSearch,
 )
 from jarvis.i18n import Language, Translator
 from jarvis.tools.base import Reply, Tool, ToolResult, render
@@ -71,6 +74,8 @@ class Brain:
         translator: Translator,
         system: str,
         max_tool_rounds: int,
+        web_search: WebSearch | None = None,  # None: no web search at all
+        daily_searches: int = 0,
         clock: Callable[[], datetime] = lambda: datetime.now().astimezone(),
     ) -> None:
         self._provider = provider
@@ -81,28 +86,39 @@ class Brain:
         self._translator = translator
         self._system = system
         self._max_rounds = max_tool_rounds
+        self._web_search = web_search
+        self._daily_searches = daily_searches
         self._clock = clock
 
     async def answer(self, text: str, language: Language) -> BrainAnswer:
         status = await self._budget.status()
         if status.state is BudgetState.EXHAUSTED:
             return _say("brain.budget_exhausted")
-        note = context_note(self._clock(), language)
+        search = await self._search_allowance()
+        searches_used_up = self._web_search is not None and search is None
+        note = context_note(self._clock(), language, searches_used_up=searches_used_up)
         messages: list[Message] = [*self._memory.messages(), UserMessage(f"{note}\n{text}")]
+        sources: list[Source] = []
         warned = False
         try:
             for _ in range(self._max_rounds):
-                completion = await self._provider.complete(self._system, messages, self._specs)
+                completion = await self._provider.complete(
+                    self._system, messages, self._specs, search
+                )
                 after = await self._budget.record(self._provider.model, completion.usage)
                 warned = warned or (
                     status.state is BudgetState.OK and after.state is not BudgetState.OK
                 )
                 status = after
+                sources += completion.message.sources
                 if completion.stop_reason == "refusal":
                     return _say("brain.refused", warned)
+                if completion.stop_reason == "pause_turn":  # a long search: let it carry on
+                    messages.append(completion.message)
+                    continue
                 calls = completion.message.tool_calls
                 if not calls:
-                    return self._final(completion.message.text, warned)
+                    return self._final(completion.message.text, warned, sources)
 
                 executions = [await self._execute(call, language) for call in calls]
                 for execution in executions:
@@ -126,13 +142,26 @@ class Brain:
         log.warning("Gave up after %d tool rounds", self._max_rounds)
         return _say("errors.generic", warned)
 
-    def _final(self, text: str, warned: bool) -> BrainAnswer:
+    async def _search_allowance(self) -> WebSearch | None:
+        """Web search for this request, if any is left today."""
+        if self._web_search is None:
+            return None
+        left = self._daily_searches - await self._budget.searches_today()
+        if left <= 0:
+            return None
+        return replace(self._web_search, max_uses=min(self._web_search.max_uses, left))
+
+    def _final(self, text: str, warned: bool, sources: Sequence[Source] = ()) -> BrainAnswer:
         if not text:
             return _say("errors.generic", warned)
+        details = None
+        if sources:
+            unique = {source.url: source for source in sources}.values()
+            details = "Sources:\n" + "\n".join(f"- {s.title}: {s.url}" for s in unique)
+            log.info("%s", details)
         # Generated text is never cached on disk (it may contain anything the user said).
-        return BrainAnswer(
-            (ToolResult(Reply("brain.say", {"text": text}, cacheable=False)),), warned
-        )
+        reply = Reply("brain.say", {"text": text}, cacheable=False)
+        return BrainAnswer((ToolResult(reply, details=details),), warned)
 
     async def _execute(self, call: ToolCall, language: Language) -> _Execution:
         tool = self._tools.get(call.name)

@@ -2,17 +2,21 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fakes import FakeProvider, call, calls, says
+from fakes import USAGE, FakeProvider, call, calls, says
 from pydantic import BaseModel, Field
 
 from jarvis.brain import Brain, BrainAnswer, BudgetGuard, ConversationMemory
 from jarvis.brain.provider import (
+    AssistantMessage,
+    Completion,
     LlmAuthError,
     LlmUnavailableError,
+    Source,
     TokenUsage,
     ToolCall,
     ToolResultsMessage,
     UserMessage,
+    WebSearch,
 )
 from jarvis.config import BudgetConfig
 from jarvis.i18n import Language, Translator
@@ -79,11 +83,19 @@ def budget_config(warn: float = 4.0, stop: float = 4.9) -> BudgetConfig:
         output_per_mtok=0.50,
         cache_write_per_mtok=0.125,
         cache_read_per_mtok=0.01,
+        web_search_usd=0.01,
     )
 
 
 class Setup:
-    def __init__(self, llm: FakeProvider, warn: float = 4.0, stop: float = 4.9) -> None:
+    def __init__(
+        self,
+        llm: FakeProvider,
+        warn: float = 4.0,
+        stop: float = 4.9,
+        search: WebSearch | None = None,
+        daily_searches: int = 0,
+    ) -> None:
         self.llm = llm
         self.store = UsageStore(Database(":memory:"))
         self.memory = ConversationMemory(max_exchanges=6, ttl_s=600)
@@ -95,6 +107,8 @@ class Setup:
             translator=Translator(TEXTS),
             system="You are JARVIS.",
             max_tool_rounds=3,
+            web_search=search,
+            daily_searches=daily_searches,
             clock=lambda: NOW,
         )
 
@@ -235,3 +249,71 @@ def test_remembered_exchanges_come_before_the_new_request() -> None:
         "AssistantMessage",
         "UserMessage",
     ]
+
+
+SEARCH = WebSearch(2, "Sorocaba", "SP", "BR", "America/Sao_Paulo")
+PALMEIRAS = Source("Palmeiras - resultados", "https://example.com/palmeiras")
+
+
+def searched(text: str, searches: int = 1) -> Completion:
+    usage = TokenUsage(input_tokens=1000, output_tokens=100, web_searches=searches)
+    return Completion(AssistantMessage(text, sources=(PALMEIRAS,)), "end_turn", usage)
+
+
+def test_web_search_is_offered_and_its_sources_kept() -> None:
+    setup = Setup(
+        FakeProvider(searched("Venceu por dois a zero, senhor.")), search=SEARCH, daily_searches=20
+    )
+
+    answer = setup.answer("Quem ganhou o jogo do Palmeiras?")
+
+    assert setup.llm.searches == [SEARCH]
+    assert answer.results[0].reply.params == {"text": "Venceu por dois a zero, senhor."}
+    assert answer.results[0].details == f"Sources:\n- {PALMEIRAS.title}: {PALMEIRAS.url}"
+    # 1,000 input and 100 output tokens plus one search at US$ 0.01
+    assert asyncio.run(setup.store.total_cost()) == pytest.approx(0.0001 + 0.00005 + 0.01)
+
+
+def with_search(llm: FakeProvider, searches_already: int, at: datetime = NOW) -> Setup:
+    setup = Setup(llm, search=SEARCH, daily_searches=20)
+    asyncio.run(setup.store.add(at, "m", (0, 0, 0, 0), 0.0, web_searches=searches_already))
+    return setup
+
+
+def test_the_daily_limit_caps_a_request() -> None:
+    setup = with_search(FakeProvider(says("Ok.")), searches_already=19)
+
+    setup.answer()
+
+    assert setup.llm.searches[0] is not None and setup.llm.searches[0].max_uses == 1
+
+
+def test_no_search_once_the_daily_limit_is_used_up() -> None:
+    setup = with_search(FakeProvider(says("Receio que não possa pesquisar hoje.")), 20)
+
+    setup.answer()
+
+    assert setup.llm.searches == [None]
+    note = setup.llm.requests[0][1][-1]
+    assert isinstance(note, UserMessage) and "unavailable until tomorrow" in note.text
+
+
+def test_yesterdays_searches_do_not_count() -> None:
+    setup = with_search(FakeProvider(says("Ok.")), 20, at=NOW - timedelta(days=1))
+
+    setup.answer()
+
+    assert setup.llm.searches == [SEARCH]
+
+
+def test_a_paused_search_turn_is_resumed() -> None:
+    paused = Completion(AssistantMessage(""), "pause_turn", USAGE)
+    setup = Setup(
+        FakeProvider(paused, says("Encontrei, senhor.")), search=SEARCH, daily_searches=20
+    )
+
+    answer = setup.answer()
+
+    assert answer.results[0].reply.params == {"text": "Encontrei, senhor."}
+    _, messages, _ = setup.llm.requests[1]
+    assert messages[-1] is paused.message

@@ -132,6 +132,7 @@ class Harness:
                 output_per_mtok=0.50,
                 cache_write_per_mtok=0.125,
                 cache_read_per_mtok=0.01,
+                web_search_usd=0.01,
             )
             brain = Brain(
                 provider=llm,

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -14,6 +15,7 @@ PRICES = BudgetConfig(
     output_per_mtok=0.50,
     cache_write_per_mtok=0.125,
     cache_read_per_mtok=0.01,
+    web_search_usd=0.01,
 )
 
 
@@ -89,3 +91,22 @@ def test_spending_is_remembered_across_restarts() -> None:
         return (await restarted.status()).spent_usd
 
     assert asyncio.run(scenario()) == pytest.approx(0.001)
+
+
+def test_each_web_search_adds_its_price() -> None:
+    guard = BudgetGuard(UsageStore(Database(":memory:")), PRICES)
+
+    assert guard.cost(TokenUsage(web_searches=2)) == pytest.approx(0.02)
+
+
+def test_searches_today_start_at_local_midnight() -> None:
+    brt = timezone(timedelta(hours=-3))
+    now = datetime(2026, 10, 13, 0, 30, tzinfo=brt)
+
+    async def scenario() -> int:
+        store = UsageStore(Database(":memory:"))
+        await store.add(now - timedelta(hours=1), "m", (0, 0, 0, 0), 0.01, web_searches=1)
+        await store.add(now, "m", (0, 0, 0, 0), 0.02, web_searches=2)
+        return await BudgetGuard(store, PRICES, clock=lambda: now).searches_today()
+
+    assert asyncio.run(scenario()) == 2

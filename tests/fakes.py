@@ -15,6 +15,7 @@ from jarvis.brain.provider import (
     TokenUsage,
     ToolCall,
     ToolSpec,
+    WebSearch,
 )
 from jarvis.i18n import Language
 from jarvis.stt.base import Transcript
@@ -115,11 +116,17 @@ class FakeProvider:
     def __init__(self, *script: Completion | Exception) -> None:
         self._script = list(script)
         self.requests: list[tuple[str, list[Message], list[ToolSpec]]] = []
+        self.searches: list[WebSearch | None] = []  # the web search offered with each request
 
     async def complete(
-        self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        web_search: WebSearch | None = None,
     ) -> Completion:
         self.requests.append((system, list(messages), list(tools)))
+        self.searches.append(web_search)
         step = self._script.pop(0)
         if isinstance(step, Exception):
             raise step
