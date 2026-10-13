@@ -13,6 +13,7 @@ dependencies = [
     "anthropic>=1.13.0",
     "edge-tts>=7.3.1",
     "faster-whisper>=1.2.1",
+    "feedparser>=6.0.14",
     "httpx2>=2.13.1",
     "numpy>=2.5.3",
     "nvidia-ml-py>=13.615.71",
@@ -87,6 +88,7 @@ module = [
     "pynvml",
     "comtypes",
     "pycaw.*",
+    "feedparser",
 ]
 ignore_missing_imports = true
 
