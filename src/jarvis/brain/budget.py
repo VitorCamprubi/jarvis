@@ -36,10 +36,12 @@ class BudgetGuard:
         store: UsageStore,
         config: BudgetConfig,
         clock: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+        on_change: Callable[[float], None] | None = None,  # the HUD shows the spending
     ) -> None:
         self._store = store
         self._config = config
         self._clock = clock
+        self._on_change = on_change
         self._spent: float | None = None  # loaded from the database on first use
 
     def cost(self, usage: TokenUsage) -> float:
@@ -54,6 +56,7 @@ class BudgetGuard:
     async def status(self) -> BudgetStatus:
         if self._spent is None:
             self._spent = await self._store.total_cost()
+            self._changed()
         return BudgetStatus(self._spent, self._state(self._spent))
 
     async def record(self, model: str, usage: TokenUsage) -> BudgetStatus:
@@ -67,6 +70,7 @@ class BudgetGuard:
         )
         await self._store.add(self._clock(), model, tokens, cost, usage.web_searches)
         self._spent = before.spent_usd + cost
+        self._changed()
         log.info(
             "LLM usage: %d in, %d out, %d cache write, %d cache read, %d web searches"
             " = US$ %.5f (total US$ %.4f)",
@@ -80,6 +84,10 @@ class BudgetGuard:
     async def searches_today(self) -> int:
         midnight = self._clock().replace(hour=0, minute=0, second=0, microsecond=0)
         return await self._store.searches_since(midnight)
+
+    def _changed(self) -> None:
+        if self._on_change is not None and self._spent is not None:
+            self._on_change(self._spent)
 
     def _state(self, spent: float) -> BudgetState:
         if spent >= self._config.stop_usd:

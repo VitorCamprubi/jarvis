@@ -110,3 +110,16 @@ def test_searches_today_start_at_local_midnight() -> None:
         return await BudgetGuard(store, PRICES, clock=lambda: now).searches_today()
 
     assert asyncio.run(scenario()) == 2
+
+
+def test_spending_changes_are_reported() -> None:
+    reported: list[float] = []
+
+    async def scenario() -> None:
+        guard = BudgetGuard(UsageStore(Database(":memory:")), PRICES, on_change=reported.append)
+        await guard.status()
+        await guard.record("m", TokenUsage(input_tokens=1_000_000))
+
+    asyncio.run(scenario())
+
+    assert reported == [0.0, pytest.approx(0.10)]

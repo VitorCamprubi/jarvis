@@ -19,6 +19,14 @@ from jarvis.audio.listener import Listener, Utterance
 from jarvis.audio.player import Player
 from jarvis.audio.tones import FeedbackSounds
 from jarvis.brain import Brain, ConversationMemory
+from jarvis.core.events import (
+    Event,
+    EventSink,
+    JarvisSpoke,
+    Shown,
+    StateChanged,
+    UserSpoke,
+)
 from jarvis.core.language import LanguagePolicy
 from jarvis.core.state import State
 from jarvis.core.verification import SpeakerVerifier
@@ -33,8 +41,6 @@ from jarvis.tts.base import TextToSpeech
 
 log = logging.getLogger(__name__)
 transcripts = logging.getLogger(TRANSCRIPT_LOGGER)
-
-StateListener = Callable[[State], None]
 
 
 def greeting_key(hour: int) -> str:
@@ -92,7 +98,7 @@ class Pipeline:
         self._confirmation_timeout_s = confirmation_timeout_s
         self._clock = clock
         self._state = State.STARTING
-        self._state_listeners: list[StateListener] = []
+        self._listeners: list[EventSink] = []
         self._turn: asyncio.Task[None] | None = None
         self._announcements: deque[tuple[Reply, Language]] = deque()
 
@@ -108,8 +114,9 @@ class Pipeline:
     def reply_language(self) -> Language:
         return self._policy.reply_language(self._language)
 
-    def subscribe(self, listener: StateListener) -> None:
-        self._state_listeners.append(listener)
+    def subscribe(self, listener: EventSink) -> None:
+        """Receive every event (state, what was heard and said...) on the core thread."""
+        self._listeners.append(listener)
 
     def start(self) -> asyncio.Task[None]:
         """Models are loaded: become ready and greet according to the time of day."""
@@ -177,9 +184,11 @@ class Pipeline:
             await self._speak(Reply("pipeline.not_understood"))
             return
         self._language = heard.transcript.language
+        self._emit(UserSpoke(said, self.reply_language))
         started = time.perf_counter()
         outcome = await self._handle(said)
         tool_s = time.perf_counter() - started
+        self._show(outcome.results)
         spoken = []
         for index, result in enumerate(outcome.results):
             if result.on_confirm is not None:
@@ -243,6 +252,8 @@ class Pipeline:
         if request.on_confirm is None:
             return request
         heard = await self._hear(self._confirmation_timeout_s)
+        if heard is not None and heard.transcript.text:
+            self._emit(UserSpoke(heard.transcript.text, self.reply_language))
         answer = classify_answer(heard.transcript.text) if heard else Answer.UNCLEAR
         log.info("Confirmation: %s", answer)
         if answer is not Answer.YES:
@@ -275,13 +286,23 @@ class Pipeline:
                 since_end + self._silence_s,
             )
         self._set_state(State.SPEAKING)
+        self._emit(JarvisSpoke(text, language))
         await self._player.play(clip)
         return text
+
+    def _show(self, results: tuple[ToolResult, ...]) -> None:
+        details = "\n\n".join(result.details for result in results if result.details)
+        links = tuple(link for result in results for link in result.links)
+        if details or links:
+            self._emit(Shown(details or None, links))
 
     def _set_state(self, state: State) -> None:
         if state is self._state:
             return
         self._state = state
         log.debug("State: %s", state)
-        for listener in self._state_listeners:
-            listener(state)
+        self._emit(StateChanged(state))
+
+    def _emit(self, event: Event) -> None:
+        for listener in self._listeners:
+            listener(event)

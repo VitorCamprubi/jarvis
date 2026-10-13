@@ -23,6 +23,7 @@ from jarvis.audio.tones import FeedbackSounds
 from jarvis.brain import Brain, BudgetGuard, ConversationMemory
 from jarvis.brain.provider import TokenUsage
 from jarvis.config import BudgetConfig
+from jarvis.core.events import Event, JarvisSpoke, Shown, StateChanged, UserSpoke
 from jarvis.core.language import LanguagePolicy
 from jarvis.core.pipeline import Pipeline, greeting_key
 from jarvis.core.state import State
@@ -31,7 +32,7 @@ from jarvis.i18n import Language, Translator
 from jarvis.router import Router
 from jarvis.storage import Database, UsageStore
 from jarvis.stt.base import Transcript
-from jarvis.tools.base import Intent, Reply, Tool, ToolResult, phrasings
+from jarvis.tools.base import Intent, Link, Reply, Tool, ToolResult, phrasings
 
 KEYS = {
     "startup.morning": ("Good morning, sir.", "Bom dia, senhor."),
@@ -58,6 +59,9 @@ CONFIRMATION_TIMEOUT_S = 6.0
 MORNING = datetime(2026, 10, 12, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
 
 
+DOCS = Link("Manners", "https://example.com/manners", "web")
+
+
 class NoParams(BaseModel):
     pass
 
@@ -69,7 +73,7 @@ class GreetTool(Tool[NoParams]):
     intents = phrasings(pt=(Intent("oi"),), en=(Intent("hello"),))
 
     async def run(self, params: NoParams) -> ToolResult:
-        return ToolResult(Reply("test.greeted"))
+        return ToolResult(Reply("test.greeted"), details="Greeted once.", links=(DOCS,))
 
 
 class DetonateTool(Tool[NoParams]):
@@ -118,7 +122,7 @@ class Harness:
         self.player = FakePlayer()
         self.sounds = FeedbackSounds.create(0.1)
         self.detonate = DetonateTool()
-        self.states: list[State] = []
+        self.events: list[Event] = []
         self.memory = ConversationMemory(max_exchanges=6, ttl_s=600)
         self.policy = LanguagePolicy()
         translator = Translator(TEXTS, choose=lambda variants: variants[0])
@@ -160,13 +164,17 @@ class Harness:
             confirmation_timeout_s=CONFIRMATION_TIMEOUT_S,
             clock=lambda: MORNING,
         )
-        self.pipeline.subscribe(self.states.append)
+        self.pipeline.subscribe(self.events.append)
+
+    @property
+    def states(self) -> list[State]:
+        return [event.state for event in self.events if isinstance(event, StateChanged)]
 
     async def ready(self) -> None:
         await self.pipeline.start()
         self.tts.spoken.clear()
         self.player.played.clear()
-        self.states.clear()
+        self.events.clear()
 
     async def turns(self, count: int = 1) -> None:
         await self.ready()
@@ -222,6 +230,18 @@ def test_routed_command_replies_in_the_spoken_language() -> None:
     assert harness.player.played[:2] == [harness.sounds.start, harness.sounds.stop]
     assert harness.states == [State.LISTENING, State.THINKING, State.SPEAKING, State.IDLE]
     assert harness.pipeline.language is Language.EN
+
+
+def test_the_turn_is_published_for_the_hud() -> None:
+    harness = Harness(heard(utterance()), FakeStt(said("Hello.", Language.EN)))
+
+    run(harness.turns)
+
+    assert [e for e in harness.events if not isinstance(e, StateChanged)] == [
+        UserSpoke("Hello.", Language.EN),
+        Shown("Greeted once.", (DOCS,)),
+        JarvisSpoke("Hello, sir.", Language.EN),
+    ]
 
 
 def test_previous_language_is_passed_to_speech_recognition() -> None:
