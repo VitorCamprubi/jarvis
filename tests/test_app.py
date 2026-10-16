@@ -29,12 +29,27 @@ def app_log(project_root: Path) -> str:
 
 
 def test_run_exits_with_error_on_invalid_config(
-    project_root: Path, capsys: pytest.CaptureFixture[str]
+    project_root: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    shown: list[str] = []
+    monkeypatch.setattr(app, "show_error", shown.append)
     write_local(project_root, "[logging\n")
 
     assert app.run() == 2
     assert "cannot start" in capsys.readouterr().out
+    assert shown == []  # a console was there to read it: no message box
+
+
+def test_without_a_console_the_reason_shows_in_a_message_box(
+    project_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shown: list[str] = []
+    monkeypatch.setattr(app, "show_error", shown.append)
+    monkeypatch.setattr(app, "is_windowless", lambda: True)  # started with Windows
+    write_local(project_root, "[logging\n")
+
+    assert app.run() == 2
+    assert len(shown) == 1 and shown[0].startswith("JARVIS cannot start:")
 
 
 def test_run_explains_an_invalid_hotkey(project_root: Path) -> None:

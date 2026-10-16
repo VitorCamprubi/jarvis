@@ -8,18 +8,21 @@ import asyncio
 import logging
 import platform
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import anthropic
 
 from jarvis import __version__, paths
 from jarvis.activation import HotkeyError, HotkeyListener, parse_hotkey
+from jarvis.audio.clip import Samples
 from jarvis.audio.devices import DeviceNotFoundError, device_name, find_device
 from jarvis.audio.listener import MicrophoneListener
+from jarvis.audio.microphone import Microphone
 from jarvis.audio.player import SoundDevicePlayer
 from jarvis.audio.tones import FeedbackSounds
 from jarvis.audio.vad import SileroVad
+from jarvis.audio.wake import OpenWakeWord, WakeWatcher
 from jarvis.brain import Brain, BudgetGuard, ConversationMemory
 from jarvis.brain.claude import ClaudeProvider
 from jarvis.brain.digest import NewsDigest
@@ -30,6 +33,7 @@ from jarvis.core.events import SpendingChanged
 from jarvis.core.language import LanguagePolicy
 from jarvis.core.pipeline import Pipeline
 from jarvis.core.runtime import CoreRuntime
+from jarvis.core.state import State
 from jarvis.core.verification import AcceptEveryone
 from jarvis.hud import Hud, watch_load
 from jarvis.i18n import Language, Translator
@@ -37,6 +41,7 @@ from jarvis.log import setup_logging, shutdown_logging
 from jarvis.router import Router
 from jarvis.storage import Database, Reminder, ReminderStore, SettingsStore, UsageStore
 from jarvis.stt.whisper import WhisperStt
+from jarvis.text import mentions_wake_word
 from jarvis.tools import (
     AppIndex,
     FileIndex,
@@ -55,6 +60,7 @@ from jarvis.tts.cache import CachedTts
 from jarvis.tts.edge import EdgeTts
 from jarvis.tts.fallback import FallbackTts
 from jarvis.tts.piper import PiperTts
+from jarvis.windows.process import claim_single_instance, is_windowless, show_error
 
 log = logging.getLogger(__name__)
 
@@ -70,17 +76,26 @@ def run() -> int:
         config = load_config(paths.CONFIG_DIR)
     except ConfigError as exc:
         # Logging is not configured yet, and it depends on this very configuration.
-        print(f"JARVIS cannot start: {exc}")
+        _cannot_start(str(exc))
         return 2
 
     setup_logging(config.logging, paths.PROJECT_ROOT / config.logging.directory)
     try:
+        if not claim_single_instance():
+            raise StartupError("JARVIS is already running: look for the reactor in the tray")
         return _run(config)
     except StartupError as exc:
         log.error("JARVIS cannot start: %s", exc)
+        _cannot_start(str(exc))
         return 2
     finally:
         shutdown_logging()
+
+
+def _cannot_start(reason: str) -> None:
+    print(f"JARVIS cannot start: {reason}")
+    if is_windowless():  # started with Windows (ADR-044): nobody sees a console
+        show_error(f"JARVIS cannot start:\n{reason}")
 
 
 def _run(config: AppConfig) -> int:
@@ -100,6 +115,10 @@ def _run(config: AppConfig) -> int:
         paths.DATA_DIR / "voices",
     )
     translator = Translator.load()
+    microphone = Microphone(
+        lambda: find_device(config.audio.input_device, "input"),  # again after a replug
+        history_s=max(config.wake.backlog_s, config.wake.confirm_s) + 1,
+    )
     # Qt must start on the main thread, before anything posts to the HUD (ADR-004).
     hud = (
         Hud(
@@ -134,7 +153,7 @@ def _run(config: AppConfig) -> int:
     log.info("Tools: %s", ", ".join(tool.name for tool in tools))
     memory = ConversationMemory(config.brain.memory_turns, config.brain.memory_minutes * 60)
     pipeline = Pipeline(
-        listener=MicrophoneListener(config.vad, SileroVad(), input_device),
+        listener=MicrophoneListener(config.vad, SileroVad(), microphone),
         stt=stt,
         tts=_build_tts(config.tts, piper),
         player=SoundDevicePlayer(output_device),
@@ -148,12 +167,18 @@ def _run(config: AppConfig) -> int:
         language=config.language.default,
         silence_ms=config.vad.silence_ms,
         confirmation_timeout_s=config.confirmation.timeout_s,
+        wake_backlog_s=config.wake.backlog_s,
     )
     if hud is not None:
         pipeline.subscribe(hud.post)
 
     runtime = CoreRuntime()
     runtime.start()
+    background = [microphone.keep_alive(), services.news.keep_fresh()]
+    if config.wake.enabled:
+        background.append(_wake_watcher(config, microphone, stt, pipeline).run())
+    if hud is not None:
+        background.append(watch_load(hud.post, config.hud.load_seconds))
     # The hotkey thread never touches the pipeline: it asks the core loop to do it.
     hotkey_listener = HotkeyListener(hotkey, on_press=lambda: runtime.call_soon(pipeline.activate))
     try:
@@ -161,9 +186,10 @@ def _run(config: AppConfig) -> int:
             _start_up(pipeline, stt, piper, services, db, llm[1] if llm else None)
         )
         hotkey_listener.start()
+        for task in background:
+            runtime.submit(_logged(task))
         log.info("Press %s to talk. Ctrl+C quits.", config.activation.hotkey.upper())
         if hud is not None:
-            runtime.submit(watch_load(hud.post, config.hud.load_seconds))
             code = hud.run(startup)
             log.info("Shutting down. Goodbye, sir.")
             return code
@@ -181,6 +207,32 @@ def _run(config: AppConfig) -> int:
         hotkey_listener.stop()
         runtime.stop()
         db.close()
+
+
+def _wake_watcher(
+    config: AppConfig, microphone: Microphone, stt: WhisperStt, pipeline: Pipeline
+) -> WakeWatcher:
+    async def says_jarvis(audio: Samples) -> bool:
+        transcript = await stt.transcribe(audio, pipeline.language)
+        log.debug("Wake word check heard: %r", transcript.text)
+        return mentions_wake_word(transcript.text)
+
+    return WakeWatcher(
+        microphone,
+        lambda: OpenWakeWord(config.wake.model),
+        config.wake,
+        confirm=says_jarvis,
+        on_wake=pipeline.wake,
+        armed=lambda: pipeline.state in (State.IDLE, State.SPEAKING),
+    )
+
+
+async def _logged(job: Coroutine[Any, Any, None]) -> None:
+    """Background jobs log their failure instead of vanishing with it."""
+    try:
+        await job
+    except Exception:
+        log.exception("A background job stopped")
 
 
 def _build_llm(

@@ -124,6 +124,20 @@ def check_audio_device(query: str, kind: Kind) -> CheckResult:
     return CheckResult(label, Status.OK, name + ("" if query else " (Windows default)"))
 
 
+def check_wake_word(model: str) -> CheckResult:
+    """The wake word model is downloaded on the first start (ADR-040)."""
+    try:
+        import openwakeword
+    except ImportError:
+        return CheckResult("Wake word", Status.FAIL, "openwakeword is not installed: run uv sync")
+    models = Path(openwakeword.__file__).parent / "resources" / "models"
+    if any(models.glob(f"{model}*.onnx")):
+        return CheckResult("Wake word", Status.OK, f'{model} ready: say "Ei Jarvis"')
+    return CheckResult(
+        "Wake word", Status.WARN, f"{model} is downloaded on the first start (needs internet once)"
+    )
+
+
 def check_llm(
     env_file: Path = paths.ENV_FILE,
     model: str = "claude-haiku-5-5",
@@ -208,6 +222,8 @@ def run_checks() -> int:
             check_audio_device(config.audio.input_device, "input"),
             check_audio_device(config.audio.output_device, "output"),
         ]
+        if config.wake.enabled:
+            results.append(check_wake_word(config.wake.model))
         results += [
             check_llm(model=config.brain.model),
             check_spending(

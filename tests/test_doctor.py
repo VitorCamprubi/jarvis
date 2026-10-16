@@ -19,6 +19,7 @@ from jarvis.doctor import (
     check_llm,
     check_python,
     check_spending,
+    check_wake_word,
 )
 
 FakeRun = Callable[..., subprocess.CompletedProcess[str]]
@@ -208,3 +209,15 @@ def test_spending_check_counts_todays_web_searches(tmp_path: Path) -> None:
     result = check_spending(db_file, stop_usd=4.9, daily_searches=20, now=now)
 
     assert result.detail.endswith("; 3 of 20 web searches today")
+
+
+def test_wake_word_check_reports_the_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import openwakeword
+
+    fake_package = tmp_path / "openwakeword"
+    (fake_package / "resources" / "models").mkdir(parents=True)
+    monkeypatch.setattr(openwakeword, "__file__", str(fake_package / "__init__.py"))
+    assert check_wake_word("hey_jarvis").status is Status.WARN  # downloaded on the first start
+
+    (fake_package / "resources" / "models" / "hey_jarvis_v0.1.onnx").write_bytes(b"")
+    assert check_wake_word("hey_jarvis").status is Status.OK
