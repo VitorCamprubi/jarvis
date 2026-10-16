@@ -559,3 +559,68 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   the last exchanges (takes a lot of screen).
 - **Decision:** A. The tray icon shows, hides and quits; web links open in the browser and
   files open through the same safe path as voice (programs are only shown, never run).
+
+## ADR-040: Wake word "Ei Jarvis" / "Hey Jarvis" with openWakeWord, confirmed by Whisper
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Context:** The brief asks for an offline, light "Jarvis" wake word, or an alternative
+  phrase if the single word is unreliable. Measured with openWakeWord's pre-trained
+  "hey jarvis" model on synthetic voices: English pronunciation scores 1.00, Brazilian
+  pronunciation only 0.18–0.26 (the model fires at 0.5), look-alikes ("Jair", "Harvey",
+  "jars") and ordinary sentences at most 0.01; 1.6 ms of CPU per 80 ms of audio. Whisper
+  transcribed "Jarvis" correctly in every clip and never in the look-alikes.
+- **Options:** **A) openWakeWord "hey jarvis", with Whisper confirming the uncertain scores**
+  (free, offline, about 2% of one core; the package has had no release since 2024 but works
+  on Python 3.14; its models are non-commercial, fine for personal use); **B) Porcupine's
+  built-in "Jarvis"** (proprietary, needs a Picovoice account and an online-validated key,
+  accent support unknown); **C) training a custom model** (hours of Colab work, uncertain).
+- **Decision:** A. A score of 0.5 or more wakes JARVIS at once; between 0.1 and 0.5 the
+  last seconds are transcribed and JARVIS wakes only if they contain "Jarvis". The last two
+  seconds of audio are kept, so "Ei Jarvis, abre o Spotify" works in one breath.
+
+## ADR-041: Barge-in
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) the hotkey or the wake word while JARVIS speaks stops the speech and
+  starts listening at once;** **B) it only stops the speech.**
+- **Decision:** A.
+
+## ADR-042: Speaking sentence by sentence
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Context:** Long replies (news, briefing, LLM answers) wait for the whole text to be
+  synthesised: 1–1.5 s before the first word.
+- **Options:** **A) synthesise and play sentence by sentence,** the next sentence being
+  synthesised while the current one plays; **B) A plus streaming the LLM's answer** into
+  the speech; **C) as before.**
+- **Decision:** A, plus fetching the news feeds in the background so a news request does
+  not wait for them. B is recorded in V2_IDEAS.
+
+## ADR-043: Whisper in int8_float16
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Context:** While a game runs, the GPU and its memory are busy and speech recognition
+  took up to 4 s (Phase 1).
+- **Options:** **A) `int8_float16`:** the same speed as float16 on this GPU (Phase 1
+  measurement) in half the video memory, 1.1 GB instead of 2.2 GB; **B) A plus a CPU model
+  when the GPU is saturated;** **C) keep float16** and suggest NVIDIA's maximum-performance
+  setting.
+- **Decision:** A, measured again with a game running; B goes to V2_IDEAS if needed.
+
+## ADR-044: Start with Windows through the user's Run registry key
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,** switched by
+  `jarvis --autostart on|off`; **B) a shortcut in the Startup folder;** **C) a scheduled
+  task at logon.**
+- **Decision:** A. JARVIS then starts with `pythonw` (no console): the HUD and tray are its
+  interface, the log file records everything, and start-up errors show a Windows message
+  box. Task Manager lists it under start-up apps, where it can also be disabled.
+
+## ADR-045: The HUD steps aside for full-screen apps
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) hide the HUD automatically while a full-screen app (game, video,
+  presentation) is in front,** using Windows' own notification state, and bring it back
+  afterwards; **B) manual only,** from the tray.
+- **Decision:** A. JARVIS keeps answering by voice while hidden.
