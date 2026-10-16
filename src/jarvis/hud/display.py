@@ -22,10 +22,12 @@ from jarvis.hud.tray import Tray
 from jarvis.hud.window import HudWindow
 from jarvis.i18n import Language, Translator
 from jarvis.tools.base import Link
+from jarvis.windows.fullscreen import full_screen_app_in_front
 
 log = logging.getLogger(__name__)
 
 WATCH_MS = 250  # how often the Qt loop lets Python see Ctrl+C and checks start-up
+FULL_SCREEN_CHECK_MS = 1500
 
 
 class Bridge(QObject):
@@ -46,6 +48,7 @@ class Hud:
         stop_usd: float,
         settings_file: Path,
         opener: Callable[[Link], object] = open_link,
+        full_screen: Callable[[], bool] = full_screen_app_in_front,
     ) -> None:
         existing = QApplication.instance()
         self._app = existing if isinstance(existing, QApplication) else QApplication([])
@@ -59,7 +62,10 @@ class Hud:
             details_seconds=config.details_seconds,
             stop_usd=stop_usd,
         )
-        self.tray = Tray(self.window, translator, language, self.quit)
+        self.tray = Tray(self.window, translator, language, self.quit, self._user_toggled)
+        self._full_screen = full_screen
+        self._stepped_aside = False  # hidden by us while a full-screen app is in front
+        self._shown_by_user = False  # shown from the tray despite that app
         self._bridge = Bridge()
         self._bridge.received.connect(self._deliver)
         self.exit_code = 0
@@ -83,11 +89,32 @@ class Hud:
         watch = QTimer()
         watch.timeout.connect(lambda: self._check(startup))
         watch.start(WATCH_MS)
+        aside = QTimer()
+        aside.timeout.connect(self.step_aside)
+        aside.start(FULL_SCREEN_CHECK_MS)
         self._app.exec()
         watch.stop()
+        aside.stop()
         self.tray.hide()
         self.window.hide()
         return self.exit_code
+
+    def step_aside(self) -> None:
+        """Out of the way of a game or a video in full screen, back afterwards (ADR-045)."""
+        if not self._full_screen():
+            self._shown_by_user = False
+            if self._stepped_aside:
+                self._stepped_aside = False
+                self.window.show()
+                self.tray.refresh()
+        elif self.window.isVisible() and not self._shown_by_user:
+            self._stepped_aside = True
+            self.window.hide()
+            self.tray.refresh()
+
+    def _user_toggled(self, visible: bool) -> None:
+        self._stepped_aside = False  # a HUD hidden from the tray stays hidden
+        self._shown_by_user = visible
 
     def _check(self, startup: Future[Any]) -> None:
         if startup.done() and startup.exception() is not None:

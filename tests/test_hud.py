@@ -292,3 +292,41 @@ def test_load_is_sampled_with_and_without_a_gpu(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(load, "read_gpu", lambda: None)
     assert load.sample_load().gpu_percent is None
+
+
+def test_the_hud_steps_aside_for_full_screen_apps(tmp_path: Path) -> None:
+    game = [False]
+    hud = Hud(
+        HudConfig(enabled=True, opacity=0.9, details_seconds=60, load_seconds=2),
+        TRANSLATOR,
+        Language.PT,
+        4.9,
+        tmp_path / "hud.ini",
+        full_screen=lambda: game[0],
+    )
+    hud.window.show()
+
+    game[0] = True
+    hud.step_aside()
+    assert not hud.window.isVisible()
+
+    hud.tray.toggle_action.trigger()  # shown from the tray during the game: it stays
+    hud.step_aside()
+    assert hud.window.isVisible()
+
+    game[0] = False
+    hud.step_aside()
+    game[0] = True
+    hud.step_aside()  # a new game: out of the way again
+    assert not hud.window.isVisible()
+
+    game[0] = False
+    hud.step_aside()  # back when the game ends
+    assert hud.window.isVisible()
+
+    hud.tray.toggle_action.trigger()  # hidden from the tray: no game brings it back
+    game[0] = True
+    hud.step_aside()
+    game[0] = False
+    hud.step_aside()
+    assert not hud.window.isVisible()

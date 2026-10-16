@@ -16,8 +16,10 @@ class Tray:
         translator: Translator,
         language: Language,
         quit_app: Callable[[], object],
+        on_toggle: Callable[[bool], object] = lambda visible: None,
     ) -> None:
         self._window = window
+        self._on_toggle = on_toggle
         self._translator = translator
         self._icon = QSystemTrayIcon(QIcon(reactor_icon()))
         self._icon.setToolTip("J.A.R.V.I.S.")
@@ -47,9 +49,14 @@ class Tray:
         self.toggle_action.setText(self._translator.text(key, language))
         self.quit_action.setText(self._translator.text("hud.quit", language))
 
+    def refresh(self) -> None:
+        """After the window was shown or hidden by someone else."""
+        self.retranslate(self._language)
+
     def _toggle(self) -> None:
         self._window.setVisible(not self._window.isVisible())
         self.retranslate(self._language)
+        self._on_toggle(self._window.isVisible())
 
     def _activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:  # a left click
