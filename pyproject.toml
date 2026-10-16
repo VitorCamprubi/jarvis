@@ -18,6 +18,7 @@ dependencies = [
     "numpy>=2.5.3",
     "nvidia-ml-py>=13.615.71",
     "onnxruntime>=1.31.0",
+    "openwakeword>=0.6.0",
     "piper-tts>=1.8.0",
     "psutil>=7.2.2",
     "pycaw>=20260927",
@@ -41,6 +42,9 @@ build-backend = "uv_build"
 default-groups = ["dev", "cuda"]
 # faster-whisper's decode_audio passes an argument that PyAV 19 removed.
 constraint-dependencies = ["av<19"]
+# JARVIS runs on Windows only (Win32, Core Audio); resolving for other systems would also
+# pull openWakeWord's Linux-only tflite-runtime, which has no Python 3.14 wheel.
+environments = ["sys_platform == 'win32'"]
 
 [dependency-groups]
 dev = [
@@ -90,6 +94,7 @@ module = [
     "comtypes",
     "pycaw.*",
     "feedparser",
+    "openwakeword.*",
 ]
 ignore_missing_imports = true
 
