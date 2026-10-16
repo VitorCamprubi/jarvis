@@ -10,8 +10,8 @@ only carry a docstring describing their future responsibility.
 | `jarvis.app` | Composition root: builds the components and wires them together | Phase 0 |
 | `jarvis.config` | Layered TOML configuration and secrets | Phase 0 |
 | `jarvis.core` | Core event loop thread, conversation pipeline, states, events for observers, speaker-verification hook | Phase 1 |
-| `jarvis.activation` | Global hotkey (Win32 `RegisterHotKey`); wake word in Phase 6 | Phase 1 |
-| `jarvis.audio` | Microphone capture, Silero VAD + loudness gate, feedback tones, playback | Phase 1 |
+| `jarvis.activation` | Global hotkey (Win32 `RegisterHotKey`) | Phase 1 |
+| `jarvis.audio` | Shared microphone stream, wake word, Silero VAD + loudness gate, feedback tones, playback | Phase 1 |
 | `jarvis.stt` | faster-whisper on CUDA, language restricted to pt/en | Phase 1 |
 | `jarvis.tts` | edge-tts with phrase cache, Piper as offline fallback | Phase 1 |
 | `jarvis.i18n` | pt-BR and en texts loaded from locale files | Phase 1 |
@@ -160,6 +160,33 @@ flowchart TB
     LOOP -- "run_in_executor" --> SQL
     LOOP -- "events through a Qt signal (queued)" --> HUD
 ```
+
+## Listening and speaking
+
+```mermaid
+flowchart LR
+    MIC["Microphone stream (one, shared)"] --> WAKE["openWakeWord: hey jarvis"]
+    MIC --> LISTEN["Listener: VAD until silence"]
+    WAKE -- "score >= 0.5" --> TURN[Turn]
+    WAKE -- "0.1 to 0.5: Whisper hears 'Jarvis'?" --> TURN
+    HOTKEY[Hotkey] --> TURN
+    TURN --> LISTEN
+```
+
+- **One microphone stream** (`jarvis.audio.microphone`) serves the wake word and the
+  listener at once, keeps the last seconds of audio and reopens itself when the headset is
+  unplugged and plugged in again.
+- **Wake word** (ADR-040): openWakeWord's "hey jarvis" scores every 80 ms on the core loop
+  (about 2% of one core). A Brazilian "Ei Jarvis" scores low, so uncertain scores are checked
+  by Whisper half a second later; a wake keeps the 3 s before it, and the transcription is
+  cut after the name, so "Ei Jarvis, abre o Spotify" is one request.
+- **Barge-in** (ADR-041): the hotkey or the wake word while JARVIS speaks cancels the turn,
+  which stops the sound at once, and starts listening.
+- **Speech** (ADR-042): replies are cut into sentences; the first is synthesised alone and
+  played while the next ones are synthesised. A long news reply now starts speaking after
+  1.6 s instead of 4.2 s.
+- **Whisper** runs in `int8_float16` (ADR-043): 1.1 GB of video memory instead of 2.3 GB, at
+  the same speed (0.36 s for a short request), leaving more room for games.
 
 ## HUD
 

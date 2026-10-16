@@ -4,10 +4,11 @@ Personal bilingual (Brazilian Portuguese / English) voice assistant for Windows,
 J.A.R.V.I.S. from the Iron Man films: push a key or say its name, ask, and it acts on the PC,
 searches the web and answers out loud, in the manner of a formal British butler.
 
-> **Status:** work in progress, Phase 5 (HUD): simple commands are resolved locally by
-> rules; everything else goes to Claude Haiku, which can use the same tools and search the
-> web; a floating heads-up display shows what is going on. A full bilingual README with demo,
-> architecture diagram and installation guide arrives in the final phase.
+> **Status:** work in progress, Phase 6 (wake word and polish): say "Ei Jarvis" or press a
+> key; simple commands are resolved locally by rules, everything else goes to Claude Haiku,
+> which can use the same tools and search the web; a floating heads-up display shows what is
+> going on. A full bilingual README with demo, architecture diagram and installation guide
+> arrives in the final phase.
 
 ## What it can do so far
 
@@ -62,21 +63,32 @@ uv run jarvis --check
 uv run jarvis
 ```
 
-Then press **Ctrl+Alt+J**, speak, and wait for the reply. Press the hotkey again while it is
-listening to cancel.
+Then say **"Ei Jarvis"** (or "Hey Jarvis"), or press **Ctrl+Alt+J**, and ask; the request
+can follow in the same breath: "Ei Jarvis, abre o Spotify". The single word "Jarvis" is not
+enough: the wake word model needs the greeting. Press the hotkey again while it is listening
+to cancel; while JARVIS is speaking, the hotkey or "Ei Jarvis" cuts him short and he listens.
 
 The HUD floats in the top right corner (drag it anywhere; it remembers the place): the
 reactor shows whether JARVIS is standing by, listening, thinking or speaking, next to the
 language, CPU/GPU/VRAM/RAM load and API spending; below come what you said, the reply, and
 clickable lists of files, news or search sources. It never takes the keyboard focus. The tray
 icon shows or hides it and quits JARVIS (so does Ctrl+C in the console); set
-`[hud] enabled = false` for the console only.
+`[hud] enabled = false` for the console only. It steps aside while a game or a video is in
+full screen and comes back afterwards.
+
+To start JARVIS with Windows, without a console window, run `uv run jarvis --autostart on`
+(`off` undoes it, `status` shows it). It then appears in Task Manager under start-up apps.
+
+The wake word model ("hey jarvis", from [openWakeWord](https://github.com/dscripka/openWakeWord))
+is downloaded on the first start; its pre-trained models are licensed CC BY-NC-SA 4.0, for
+non-commercial use. With `[wake] enabled = false` only the hotkey wakes JARVIS.
 
 | Command | What it does |
 |---|---|
 | `uv run jarvis --check` | Checks Python, GPU, CUDA, configuration, hotkey, audio devices, the API key and spending so far |
 | `uv run jarvis --devices` | Lists microphones and audio outputs |
 | `uv run jarvis --mic-test` | Measures background noise and your voice, suggests the VAD level |
+| `uv run jarvis --autostart on\|off\|status` | Starts JARVIS with Windows (no console window), or stops doing so |
 
 Configuration lives in `config/default.toml`; put personal overrides in `config/local.toml`
 (see `config/local.example.toml`) and secrets in `.env` (see `.env.example`).
