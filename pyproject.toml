@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "0.1.0"
+version = "1.0.0"
 description = "Personal bilingual (pt-BR/en) voice assistant for Windows, inspired by J.A.R.V.I.S."
 readme = "README.md"
 license = "MIT"
@@ -49,6 +49,7 @@ environments = ["sys_platform == 'win32'"]
 [dependency-groups]
 dev = [
     "mypy>=2.4.0",
+    "pillow>=12.0",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
     "types-psutil>=7.2.2.20260906",
@@ -79,7 +80,7 @@ select = [
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
