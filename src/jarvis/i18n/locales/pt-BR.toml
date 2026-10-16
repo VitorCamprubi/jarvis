@@ -149,6 +149,7 @@ exact = "{h24}h"
 with_minutes = "{h24}h{m:02d}"
 
 [errors]
+microphone = "Receio ter perdido o microfone, senhor. Vou continuar tentando reconectar."
 generic = [
     "Lamento muito, senhor. Algo deu errado do meu lado.",
     "Minhas desculpas, senhor. Parece que tropecei nos meus próprios circuitos.",

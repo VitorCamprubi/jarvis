@@ -1,7 +1,7 @@
 """Test doubles shared by the tests (hand-written, no mocking library)."""
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
@@ -31,19 +31,26 @@ def utterance(seconds: float = 1.0) -> Utterance:
 
 
 class FakeListener:
-    def __init__(self, *results: Utterance | None) -> None:
+    def __init__(self, *results: Utterance | Exception | None) -> None:
         self._results = list(results)
         self.calls = 0
         self.timeouts: list[float | None] = []
+        self.backlogs: list[float] = []
         self.listening = asyncio.Event()
 
-    async def listen(self, no_speech_timeout_s: float | None = None) -> Utterance | None:
+    async def listen(
+        self, no_speech_timeout_s: float | None = None, backlog_s: float = 0.0
+    ) -> Utterance | None:
         self.calls += 1
         self.timeouts.append(no_speech_timeout_s)
+        self.backlogs.append(backlog_s)
         self.listening.set()
         if not self._results:
             await asyncio.Event().wait()  # listens forever, until cancelled
-        return self._results.pop(0)
+        result = self._results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 class FakeStt:
@@ -83,9 +90,15 @@ class FakeTts:
 class FakePlayer:
     def __init__(self) -> None:
         self.played: list[AudioClip] = []
+        # Clips for which this returns True play until cancelled, like a long reply.
+        self.hold: Callable[[AudioClip], bool] | None = None
+        self.holding = asyncio.Event()
 
     async def play(self, played: AudioClip) -> None:
         self.played.append(played)
+        if self.hold is not None and self.hold(played):
+            self.holding.set()
+            await asyncio.Event().wait()
         await asyncio.sleep(0)
 
 

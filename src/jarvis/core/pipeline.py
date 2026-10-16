@@ -3,10 +3,13 @@
 The rule router answers fixed commands locally (ADR-019); anything else goes to the LLM with
 the tools (ADR-026). Tools that change the session ask for a spoken "yes" first (ADR-025).
 Every exchange goes into the short-term memory (ADR-028), and unprompted announcements (due
-reminders) wait until no turn is running.
+reminders) wait until no turn is running. A turn starts with the hotkey or the wake word
+(ADR-040); either one, while JARVIS speaks, cuts him short and listens (ADR-041). Replies are
+spoken sentence by sentence, the next one synthesised while the current one plays (ADR-042).
 """
 
 import asyncio
+import contextlib
 import logging
 import time
 from collections import deque
@@ -15,7 +18,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from jarvis.audio.listener import Listener, Utterance
+from jarvis.audio.clip import AudioClip
+from jarvis.audio.listener import Listener, MicrophoneError, Utterance
 from jarvis.audio.player import Player
 from jarvis.audio.tones import FeedbackSounds
 from jarvis.brain import Brain, ConversationMemory
@@ -34,7 +38,8 @@ from jarvis.i18n import Language, Translator
 from jarvis.log import TRANSCRIPT_LOGGER
 from jarvis.router import Router
 from jarvis.stt.base import SpeechToText, Transcript
-from jarvis.text import Answer, classify_answer
+from jarvis.text import Answer, after_wake_word, classify_answer
+from jarvis.text.sentences import speech_chunks
 from jarvis.text.when import part_of_day
 from jarvis.tools.base import Reply, ToolResult, render
 from jarvis.tts.base import TextToSpeech
@@ -80,6 +85,7 @@ class Pipeline:
         language: Language,
         silence_ms: int,
         confirmation_timeout_s: float,
+        wake_backlog_s: float = 0.0,
         clock: Callable[[], datetime] = lambda: datetime.now().astimezone(),
     ) -> None:
         self._listener = listener
@@ -96,6 +102,7 @@ class Pipeline:
         self._language = language  # the language last spoken by the user
         self._silence_s = silence_ms / 1000
         self._confirmation_timeout_s = confirmation_timeout_s
+        self._wake_backlog_s = wake_backlog_s
         self._clock = clock
         self._state = State.STARTING
         self._listeners: list[EventSink] = []
@@ -124,12 +131,15 @@ class Pipeline:
         return self._begin(self._speak(Reply(greeting_key(self._clock().hour))))
 
     def activate(self) -> asyncio.Task[None] | None:
-        """The hotkey was pressed: start a turn (returned), or cancel it while listening."""
+        """The hotkey was pressed: start a turn (returned), cancel it while listening, or
+        interrupt the speech and listen."""
         if self._state is State.STARTING:
             log.info("Still starting up; activation ignored")
             return None
         turn = self._turn
         if turn is not None and not turn.done():
+            if self._state is State.SPEAKING:
+                return self._interrupt(turn)
             if self._state is State.LISTENING:
                 log.info("Listening cancelled")
                 turn.cancel()
@@ -137,6 +147,27 @@ class Pipeline:
                 log.info("Busy (%s); activation ignored", self._state)
             return None
         return self._begin(self._conversation_turn())
+
+    def wake(self) -> asyncio.Task[None] | None:
+        """The wake word was heard: listen, keeping the audio from just before, since the
+        request may follow in the same breath; or interrupt the speech."""
+        turn = self._turn
+        if self._state is State.SPEAKING and turn is not None and not turn.done():
+            return self._interrupt(turn, self._wake_backlog_s)
+        if self._state is not State.IDLE or self._busy():
+            return None
+        return self._begin(self._conversation_turn(self._wake_backlog_s))
+
+    def _interrupt(self, turn: asyncio.Task[None], backlog_s: float = 0.0) -> asyncio.Task[None]:
+        log.info("Interrupted while speaking")
+        turn.cancel()
+
+        async def listen_next() -> None:
+            with contextlib.suppress(asyncio.CancelledError):
+                await turn
+            await self._conversation_turn(backlog_s)
+
+        return self._begin(listen_next())
 
     def announce(self, reply: Reply, language: Language) -> None:
         """Say something unprompted (a due reminder) as soon as no turn is running."""
@@ -163,10 +194,11 @@ class Pipeline:
         """Whatever happens in a turn, JARVIS ends up idle and keeps running."""
         try:
             await body
-        except Exception:
+        except Exception as exc:
+            key = "errors.microphone" if isinstance(exc, MicrophoneError) else "errors.generic"
             log.exception("Turn failed")
             try:
-                await self._speak(Reply("errors.generic"))
+                await self._speak(Reply(key))
             except Exception:
                 log.exception("Could not even apologise")
         finally:
@@ -175,11 +207,19 @@ class Pipeline:
                 # Runs once this task has finished, so the next one can start.
                 asyncio.get_running_loop().call_soon(self._announce_when_free)
 
-    async def _conversation_turn(self) -> None:
-        heard = await self._hear()
+    async def _conversation_turn(self, backlog_s: float = 0.0) -> None:
+        """``backlog_s`` > 0: woken by voice, and the audio may start with "Ei Jarvis"."""
+        heard = await self._hear(backlog_s=backlog_s)
         if heard is None:
             return
         said = heard.transcript.text
+        if backlog_s:
+            said = after_wake_word(said)
+            if not said:  # only "Ei Jarvis": now the request itself
+                heard = await self._hear()
+                if heard is None:
+                    return
+                said = heard.transcript.text
         if not said:
             await self._speak(Reply("pipeline.not_understood"))
             return
@@ -189,23 +229,36 @@ class Pipeline:
         outcome = await self._handle(said)
         tool_s = time.perf_counter() - started
         self._show(outcome.results)
-        spoken = []
-        for index, result in enumerate(outcome.results):
-            if result.on_confirm is not None:
-                spoken.append(await self._speak(result.reply))
-                spoken.append(await self._speak((await self._confirm(result)).reply))
-            else:
-                timed = heard if index == 0 else None
-                spoken.append(await self._speak(result.reply, timed, tool_s))
-        if outcome.budget_warning:
-            spoken.append(await self._speak(Reply("brain.budget_warning")))
-        self._memory.add(said, " ".join(spoken))
+        spoken: list[str] = []
+        try:
+            for index, result in enumerate(outcome.results):
+                if result.on_confirm is not None:
+                    spoken.append(await self._speak(result.reply))
+                    spoken.append(await self._speak((await self._confirm(result)).reply))
+                else:
+                    timed = heard if index == 0 else None
+                    spoken.append(await self._speak(result.reply, timed, tool_s))
+            if outcome.budget_warning:
+                spoken.append(await self._speak(Reply("brain.budget_warning")))
+        finally:  # an interrupted reply is remembered too, as far as it went
+            self._memory.add(said, " ".join(spoken))
 
-    async def _hear(self, no_speech_timeout_s: float | None = None) -> Heard | None:
+    async def _hear(
+        self, no_speech_timeout_s: float | None = None, backlog_s: float = 0.0
+    ) -> Heard | None:
         """Listen between the start and stop tones and transcribe; None if nothing usable."""
         self._set_state(State.LISTENING)
-        await self._player.play(self._sounds.start)
-        utterance = await self._listener.listen(no_speech_timeout_s)
+        if backlog_s:
+            # Woken by voice, the request may already be under way: every frame counts, so
+            # the start tone plays while listening instead of before.
+            start_tone = asyncio.create_task(self._player.play(self._sounds.start))
+            try:
+                utterance = await self._listener.listen(no_speech_timeout_s, backlog_s)
+            finally:
+                start_tone.cancel()
+        else:
+            await self._player.play(self._sounds.start)
+            utterance = await self._listener.listen(no_speech_timeout_s)
         # The "got it" tone plays while Whisper works, so it costs no time.
         stop_tone = asyncio.create_task(self._player.play(self._sounds.stop))
         try:
@@ -267,28 +320,44 @@ class Pipeline:
         tool_s: float = 0.0,
         language: Language | None = None,
     ) -> str:
-        """Say a reply; returns the text spoken."""
+        """Say a reply, sentence by sentence; returns the text spoken."""
         language = language or self.reply_language
         text = render(reply, self._translator, language)
+        chunks = speech_chunks(text) or [text]
         started = time.perf_counter()
-        clip = await self._tts.synthesize(text, language, cacheable=reply.cacheable)
-        if heard is not None:
-            tts_s = time.perf_counter() - started
-            since_end = time.perf_counter() - heard.utterance.ended_at
-            log.info(
-                "Latency: speech-to-text %.2f s, rules/LLM %.2f s, text-to-speech %.2f s; reply "
-                "starts %.2f s after the end of speech was detected, %.2f s after you "
-                "stopped talking",
-                heard.stt_s,
-                tool_s,
-                tts_s,
-                since_end,
-                since_end + self._silence_s,
-            )
-        self._set_state(State.SPEAKING)
-        self._emit(JarvisSpoke(text, language))
-        await self._player.play(clip)
+        next_clip = self._synthesize(chunks[0], language, reply.cacheable)
+        try:
+            for index in range(len(chunks)):
+                clip = await next_clip
+                if index + 1 < len(chunks):  # synthesised while this one plays
+                    next_clip = self._synthesize(chunks[index + 1], language, reply.cacheable)
+                if index == 0:
+                    if heard is not None:
+                        self._log_latency(heard, tool_s, time.perf_counter() - started)
+                    self._set_state(State.SPEAKING)
+                    self._emit(JarvisSpoke(text, language))
+                await self._player.play(clip)
+        finally:
+            next_clip.cancel()  # nothing left synthesising after an interruption
         return text
+
+    def _synthesize(
+        self, text: str, language: Language, cacheable: bool
+    ) -> asyncio.Task[AudioClip]:
+        return asyncio.create_task(self._tts.synthesize(text, language, cacheable=cacheable))
+
+    def _log_latency(self, heard: Heard, tool_s: float, tts_s: float) -> None:
+        since_end = time.perf_counter() - heard.utterance.ended_at
+        log.info(
+            "Latency: speech-to-text %.2f s, rules/LLM %.2f s, text-to-speech %.2f s; reply "
+            "starts %.2f s after the end of speech was detected, %.2f s after you "
+            "stopped talking",
+            heard.stt_s,
+            tool_s,
+            tts_s,
+            since_end,
+            since_end + self._silence_s,
+        )
 
     def _show(self, results: tuple[ToolResult, ...]) -> None:
         details = "\n\n".join(result.details for result in results if result.details)

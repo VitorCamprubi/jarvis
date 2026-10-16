@@ -18,10 +18,11 @@ from fakes import (
 )
 from pydantic import BaseModel
 
-from jarvis.audio.listener import Utterance
+from jarvis.audio.clip import AudioClip
+from jarvis.audio.listener import MicrophoneError, Utterance
 from jarvis.audio.tones import FeedbackSounds
 from jarvis.brain import Brain, BudgetGuard, ConversationMemory
-from jarvis.brain.provider import TokenUsage
+from jarvis.brain.provider import TokenUsage, UserMessage
 from jarvis.config import BudgetConfig
 from jarvis.core.events import Event, JarvisSpoke, Shown, StateChanged, UserSpoke
 from jarvis.core.language import LanguagePolicy
@@ -46,6 +47,7 @@ KEYS = {
     "brain.budget_warning": ("Budget nearly spent, sir.", "Orçamento quase no fim, senhor."),
     "confirm.cancelled": ("Cancelled, sir.", "Cancelado, senhor."),
     "errors.generic": ("Something broke, sir.", "Algo quebrou, senhor."),
+    "errors.microphone": ("Mic lost, sir.", "Microfone perdido, senhor."),
     "test.greeted": ("Hello, sir.", "Olá, senhor."),
     "test.confirm": ("Detonate, sir?", "Detonar, senhor?"),
     "test.done": ("Boom, sir.", "Bum, senhor."),
@@ -56,6 +58,7 @@ TEXTS = {
     Language.PT: {key: [pt] for key, (_, pt) in KEYS.items()},
 }
 CONFIRMATION_TIMEOUT_S = 6.0
+WAKE_BACKLOG_S = 3.0
 MORNING = datetime(2026, 10, 12, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
 
 
@@ -162,6 +165,7 @@ class Harness:
             language=Language.PT,
             silence_ms=600,
             confirmation_timeout_s=CONFIRMATION_TIMEOUT_S,
+            wake_backlog_s=WAKE_BACKLOG_S,
             clock=lambda: MORNING,
         )
         self.pipeline.subscribe(self.events.append)
@@ -478,3 +482,123 @@ def test_rejected_voice_is_not_transcribed() -> None:
     run(harness.turns)
 
     assert harness.stt.calls == []
+
+
+def is_speech(harness: Harness) -> Callable[[AudioClip], bool]:
+    return lambda clip: clip is not harness.sounds.start and clip is not harness.sounds.stop
+
+
+def test_the_wake_word_starts_a_turn_with_the_audio_from_before() -> None:
+    harness = Harness(heard(utterance()), FakeStt(said("Ei Jarvis, oi.")))
+
+    async def scenario() -> None:
+        await harness.ready()
+        turn = harness.pipeline.wake()
+        assert turn is not None
+        await turn
+
+    run(scenario)
+
+    assert harness.listener.backlogs == [WAKE_BACKLOG_S]
+    assert harness.spoken_texts == ["Olá, senhor."]  # "oi" reached the rule, without "Ei Jarvis"
+
+
+def test_only_the_wake_word_then_the_request() -> None:
+    harness = Harness(heard(utterance(), utterance()), FakeStt(said("Rei Jarvis."), said("Oi.")))
+
+    async def scenario() -> None:
+        await harness.ready()
+        turn = harness.pipeline.wake()
+        assert turn is not None
+        await turn
+
+    run(scenario)
+
+    assert harness.listener.backlogs == [WAKE_BACKLOG_S, 0.0]
+    assert harness.spoken_texts == ["Olá, senhor."]
+
+
+def test_the_wake_word_is_ignored_while_busy() -> None:
+    harness = Harness(heard(), FakeStt())
+
+    async def scenario() -> None:
+        await harness.ready()
+        listening = harness.pipeline.activate()
+        await harness.listener.listening.wait()
+        assert harness.pipeline.wake() is None  # already listening
+        assert listening is not None
+        listening.cancel()
+
+    run(scenario)
+
+
+def test_the_hotkey_interrupts_jarvis_and_listens() -> None:
+    harness = Harness(
+        heard(utterance(), utterance()), FakeStt(said("Oi."), said("Hello.", Language.EN))
+    )
+
+    async def scenario() -> None:
+        await harness.ready()
+        harness.player.hold = is_speech(harness)
+        first = harness.pipeline.activate()
+        await harness.player.holding.wait()  # "Olá, senhor." is playing
+        harness.player.hold = None
+        second = harness.pipeline.activate()
+        assert first is not None and second is not None and second is not first
+        await second
+        assert first.cancelled() or first.done()
+
+    run(scenario)
+
+    assert harness.spoken_texts == ["Olá, senhor.", "Hello, sir."]
+    remembered = harness.memory.messages()[0]
+    assert isinstance(remembered, UserMessage) and remembered.text == "Oi."  # the cut reply
+
+
+def test_the_wake_word_interrupts_too() -> None:
+    harness = Harness(heard(utterance(), utterance()), FakeStt(said("Oi."), said("Ei Jarvis, oi.")))
+
+    async def scenario() -> None:
+        await harness.ready()
+        harness.player.hold = is_speech(harness)
+        harness.pipeline.activate()
+        await harness.player.holding.wait()
+        harness.player.hold = None
+        interruption = harness.pipeline.wake()
+        assert interruption is not None
+        await interruption
+
+    run(scenario)
+
+    assert harness.listener.backlogs == [0.0, WAKE_BACKLOG_S]
+    assert harness.spoken_texts == ["Olá, senhor.", "Olá, senhor."]
+
+
+def test_long_replies_are_spoken_sentence_by_sentence() -> None:
+    reply = (
+        "Senhor, aqui estão as notícias de tecnologia de hoje. A primeira fala de um novo "
+        "telefone. A segunda trata de inteligência artificial. A terceira é sobre jogos."
+    )
+    harness = Harness(
+        heard(utterance()), FakeStt(said("Quais as notícias?")), llm=FakeProvider(says(reply))
+    )
+
+    run(harness.turns)
+
+    assert harness.spoken_texts == [
+        "Senhor, aqui estão as notícias de tecnologia de hoje.",
+        "A primeira fala de um novo telefone. A segunda trata de inteligência artificial. "
+        "A terceira é sobre jogos.",
+    ]
+    jarvis_spoke = [e for e in harness.events if isinstance(e, JarvisSpoke)]
+    assert [e.text for e in jarvis_spoke] == [reply]  # the HUD gets the whole reply once
+
+
+def test_a_lost_microphone_is_reported_in_character() -> None:
+    harness = Harness(
+        FakeListener(MicrophoneError("The microphone stopped sending audio")), FakeStt()
+    )
+
+    run(harness.turns)
+
+    assert harness.spoken_texts == ["Microfone perdido, senhor."]

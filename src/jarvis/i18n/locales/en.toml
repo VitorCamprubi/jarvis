@@ -149,6 +149,7 @@ exact = "{h12} {ampm}"
 with_minutes = "{h12}:{m:02d} {ampm}"
 
 [errors]
+microphone = "I'm afraid I've lost the microphone, sir. I'll keep trying to reconnect."
 generic = [
     "I'm terribly sorry, sir. Something went wrong on my end.",
     "My apologies, sir. I seem to have tripped over my own circuits.",
