@@ -624,3 +624,32 @@ A decision is never edited after the fact; a later ADR supersedes it instead.
   presentation) is in front,** using Windows' own notification state, and bring it back
   afterwards; **B) manual only,** from the tray.
 - **Decision:** A. JARVIS keeps answering by voice while hidden.
+
+## ADR-046: README in English, with a Portuguese twin
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) `README.md` in English and `README.pt-BR.md`,** linked to each other at
+  the top; **B) one bilingual file;** **C) English with a short Portuguese summary.**
+- **Decision:** A. The usual GitHub layout, readable by recruiters in both languages.
+
+## ADR-047: A demo GIF rendered by the HUD's own code, then a real recording
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) a screen recording by the owner;** **B) an animation rendered by the HUD's
+  code from scripted events** (reproducible with a script in the repository, but no desktop
+  and no voice); **C) B now, replaced by A when recorded.**
+- **Decision:** C.
+
+## ADR-048: The demo video in Portuguese, with an English part
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) Portuguese with an English part,** showing the bilingual design, and
+  English subtitles; **B) English only;** **C) Portuguese only.**
+- **Decision:** A.
+
+## ADR-049: Version 1.0.0 as a GitHub Release
+
+- **Date:** 2026-10-15 · **Status:** Accepted
+- **Options:** **A) tag `v1.0.0` and a GitHub Release with notes** (features, installation,
+  known limitations); **B) the tag only;** **C) neither.**
+- **Decision:** A, published once the owner approves the delivery.
