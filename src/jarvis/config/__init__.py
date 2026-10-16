@@ -24,6 +24,7 @@ from jarvis.config.models import (
     UserConfig,
     VadConfig,
     VolumeConfig,
+    WakeConfig,
     WeatherConfig,
 )
 from jarvis.config.secrets import Secrets, load_secrets
@@ -53,6 +54,7 @@ __all__ = [
     "UserConfig",
     "VadConfig",
     "VolumeConfig",
+    "WakeConfig",
     "WeatherConfig",
     "load_config",
     "load_secrets",

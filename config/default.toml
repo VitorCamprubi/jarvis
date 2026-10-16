@@ -46,7 +46,7 @@ pre_roll_ms = 300         # audio kept from just before speech starts (first syl
 [stt]
 model = "large-v3-turbo"  # faster-whisper model name (ADR-015)
 device = "cuda"           # "cuda" or "cpu" (falls back to cpu automatically if CUDA fails)
-compute_type = "float16"  # float16 on GPU; int8 on CPU
+compute_type = "int8_float16"  # same speed as float16 in half the VRAM (ADR-043); int8 on CPU
 beam_size = 5
 # Language detection is restricted to pt/en (ADR-016). Below these confidence levels
 # JARVIS keeps the language of the previous turn. Short audio needs more confidence.
@@ -140,6 +140,16 @@ country_code = "BR"
 latitude = -23.50167
 longitude = -47.45806
 timezone = "America/Sao_Paulo"
+
+[wake]
+# "Ei Jarvis" / "Hey Jarvis" (ADR-040); the hotkey keeps working either way.
+enabled = true
+model = "hey_jarvis"
+threshold = 0.5               # wakes at once (English-like pronunciation scores about 1.0)
+confirm_threshold = 0.1       # from here up, Whisper checks for "Jarvis" (Brazilian accent: 0.2-0.3)
+confirm_s = 2.0               # seconds transcribed for that check
+backlog_s = 3.0               # audio from before the wake kept in the request ("Ei Jarvis, abre...")
+cooldown_s = 2.0
 
 [hud]
 # The heads-up display and tray icon (ADR-037 to ADR-039).

@@ -170,6 +170,22 @@ class RemindersConfig(_Section):
     default_hour: int = Field(ge=0, le=23)  # "amanhã" without a time
 
 
+class WakeConfig(_Section):
+    enabled: bool
+    model: str = Field(min_length=1)  # an openWakeWord pre-trained model
+    threshold: float = Field(gt=0, le=1)  # wakes at once
+    confirm_threshold: float = Field(gt=0, le=1)  # from here up, Whisper confirms
+    confirm_s: float = Field(gt=0.5, le=5)  # audio transcribed to confirm
+    backlog_s: float = Field(ge=0, le=6)  # audio before the wake kept in the request
+    cooldown_s: float = Field(ge=0, le=10)
+
+    @model_validator(mode="after")
+    def _confirm_below_threshold(self) -> Self:
+        if self.confirm_threshold > self.threshold:
+            raise ValueError("wake.confirm_threshold cannot exceed wake.threshold")
+        return self
+
+
 class HudConfig(_Section):
     enabled: bool  # false: console only, as in Phases 1 to 4
     opacity: float = Field(ge=0.3, le=1.0)  # of the panel's background
@@ -207,6 +223,7 @@ class AppConfig(_Section):
     weather: WeatherConfig
     news: NewsConfig
     hud: HudConfig
+    wake: WakeConfig
 
     @model_validator(mode="after")
     def _check_vad_timings(self) -> Self:
