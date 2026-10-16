@@ -29,6 +29,7 @@ from jarvis.tools.base import Intent, Link, Reply, Tool, ToolResult, phrasings
 log = logging.getLogger(__name__)
 
 USER_AGENT = "JARVIS/0.1 (personal voice assistant; RSS reader)"
+REFRESH_AHEAD = 0.9  # of the cache's lifetime
 GOOGLE_NEWS = "https://news.google.com/rss/search"
 GOOGLE_EDITIONS = {
     Language.PT: "hl=pt-BR&gl=BR&ceid=BR:pt-419",
@@ -148,8 +149,17 @@ class NewsService:
             google_source(t.query, t.language, hours) for t in self._config.topics
         ]
 
+    async def keep_fresh(self) -> None:
+        """Re-read the configured feeds a little before the cache expires, so a request for
+        the news never waits for them (ADR-042)."""
+        if self._config.cache_minutes <= 0:
+            return
+        while True:
+            await self.stories(refresh=True)
+            await asyncio.sleep(self._config.cache_minutes * 60 * REFRESH_AHEAD)
+
     async def stories(
-        self, topic: str | None = None, language: Language = Language.PT
+        self, topic: str | None = None, language: Language = Language.PT, refresh: bool = False
     ) -> list[Story] | None:
         """Recent, de-duplicated stories; None when no source could be read."""
         sources = self.sources(topic, language)
@@ -159,7 +169,9 @@ class NewsService:
             follow_redirects=True,
             transport=self._transport,
         ) as client:
-            fetched = await asyncio.gather(*(self._read(client, source) for source in sources))
+            fetched = await asyncio.gather(
+                *(self._read(client, source, refresh) for source in sources)
+            )
         if all(stories is None for stories in fetched):
             return None
         oldest = self._clock() - timedelta(hours=self._config.max_age_hours)
@@ -197,9 +209,15 @@ class NewsService:
         reply = Reply("news.headlines", {"titles": titles}, cacheable=False)
         return ToolResult(reply, details, links=links)
 
-    async def _read(self, client: httpx2.AsyncClient, source: NewsSource) -> list[Story] | None:
+    async def _read(
+        self, client: httpx2.AsyncClient, source: NewsSource, refresh: bool = False
+    ) -> list[Story] | None:
         cached = self._cache.get(source.url)
-        if cached and self._monotonic() - cached[0] < self._config.cache_minutes * 60:
+        if (
+            cached
+            and not refresh
+            and self._monotonic() - cached[0] < self._config.cache_minutes * 60
+        ):
             return cached[1]
         try:
             response = await client.get(source.url)

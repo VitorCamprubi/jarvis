@@ -228,3 +228,13 @@ def test_the_briefing_can_skip_the_bulletins_introduction() -> None:
     asyncio.run(service(Network(), summarizer).bulletin(3, Language.PT, introduce=False))
 
     assert summarizer.introduced == [False]
+
+
+def test_the_background_refresh_reads_the_feeds_again() -> None:
+    network = Network()
+    news = service(network)
+
+    stories_of(news)
+    asyncio.run(news.stories(refresh=True))  # what keep_fresh does before the cache expires
+
+    assert len(network.asked) == 4  # both sources, twice
