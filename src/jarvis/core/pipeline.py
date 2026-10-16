@@ -224,7 +224,7 @@ class Pipeline:
             await self._speak(Reply("pipeline.not_understood"))
             return
         self._language = heard.transcript.language
-        self._emit(UserSpoke(said, self.reply_language))
+        self._emit(UserSpoke(heard.transcript.text, self.reply_language))  # as said, greeting too
         started = time.perf_counter()
         outcome = await self._handle(said)
         tool_s = time.perf_counter() - started
